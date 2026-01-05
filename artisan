@@ -1,0 +1,12 @@
+#!/usr/bin/env php
+<?php
+
+define('LARAVEL_START', microtime(true));
+
+$basePath = __DIR__;
+
+require_once $basePath . '/vendor/autoload.php';
+
+$app = require_once $basePath . '/bootstrap/app.php';
+
+exit($app->handleCommand(new Symfony\Component\Console\Input\ArgvInput));
