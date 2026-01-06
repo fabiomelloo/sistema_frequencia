@@ -56,7 +56,7 @@ class UsersController extends Controller
         ]);
 
         return redirect()
-            ->route('users.index')
+            ->route('admin.users.index')
             ->with('success', 'Usuário criado com sucesso!');
     }
 

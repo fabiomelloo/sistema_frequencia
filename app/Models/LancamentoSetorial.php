@@ -38,6 +38,11 @@ class LancamentoSetorial extends Model
     public function evento(): BelongsTo
     {
         return $this->belongsTo(EventoFolha::class, 'evento_id');
+        return $this->belongsTo(EventoFolha::class, 'evento_id')->with('setoresComDireito');
+        
+    {
+        return $this->belongsTo(EventoFolha::class, 'evento_id');
+    }
     }
 
     public function setorOrigem(): BelongsTo

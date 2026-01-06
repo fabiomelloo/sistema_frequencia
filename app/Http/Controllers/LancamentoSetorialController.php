@@ -22,12 +22,10 @@ class LancamentoSetorialController extends Controller
             ->orderBy('nome')
             ->get();
 
-        // Eventos permitidos para o setor
-        $eventos = EventoFolha::whereHas('setoresComDireito', function ($q) use ($setor) {
-            $q->where('setor_id', $setor->id);
-        })
-            ->where('ativo', true)
-            ->orderBy('descricao')
+        // Eventos permitidos para o setor - usando relacionamento do Setor
+        $eventos = $setor->eventosPermitidos()
+            ->where('eventos_folha.ativo', true)
+            ->orderBy('eventos_folha.descricao')
             ->get();
 
         return view('lancamentos.create', [
@@ -67,6 +65,7 @@ class LancamentoSetorialController extends Controller
             ->with(['servidor', 'evento', 'setorOrigem'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
+            
 
         return view('lancamentos.index', [
             'lancamentos' => $lancamentos,
@@ -78,6 +77,7 @@ class LancamentoSetorialController extends Controller
         $user = auth()->user();
 
         // Validar propriedade
+        
         if ($lancamento->setor_origem_id !== $user->setor_id) {
             abort(403, 'Não autorizado.');
         }
@@ -103,11 +103,11 @@ class LancamentoSetorialController extends Controller
             ->orderBy('nome')
             ->get();
 
-        $eventos = EventoFolha::whereHas('setoresComDireito', function ($q) use ($user) {
-            $q->where('setor_id', $user->setor_id);
-        })
-            ->where('ativo', true)
-            ->orderBy('descricao')
+        // Eventos permitidos para o setor - usando relacionamento do Setor
+        $setor = $user->setor;
+        $eventos = $setor->eventosPermitidos()
+            ->where('eventos_folha.ativo', true)
+            ->orderBy('eventos_folha.descricao')
             ->get();
 
         return view('lancamentos.edit', [

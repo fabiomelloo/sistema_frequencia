@@ -34,7 +34,7 @@ class SetorController extends Controller
         $validated = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'sigla' => ['required', 'string', 'max:10'],
-            'ativo' => ['boolean'],
+            'ativo' => ['nullable'],
         ]);
 
         Setor::create([
@@ -48,37 +48,37 @@ class SetorController extends Controller
             ->with('success', 'Setor criado com sucesso!');
     }
 
-    public function show(Setor $setor): View
+    public function show(Setor $setore): View
     {
-        $setor->load(['usuarios', 'servidores']);
-        
+        $setore->load(['usuarios', 'servidores']);
+
         // Carregar eventos permitidos sem filtro de ativo para visualização completa
-        $eventosPermitidos = $setor->belongsToMany(\App\Models\EventoFolha::class, 'evento_setor', 'setor_id', 'evento_id')
+        $eventosPermitidos = $setore->belongsToMany(\App\Models\EventoFolha::class, 'evento_setor', 'setor_id', 'evento_id')
             ->withPivot('ativo')
             ->get();
 
         return view('admin.setores.show', [
-            'setor' => $setor,
+            'setor' => $setore,
             'eventosPermitidos' => $eventosPermitidos,
         ]);
     }
 
-    public function edit(Setor $setor): View
+    public function edit(Setor $setore): View
     {
         return view('admin.setores.edit', [
-            'setor' => $setor,
+            'setor' => $setore,
         ]);
     }
 
-    public function update(Request $request, Setor $setor): RedirectResponse
+    public function update(Request $request, Setor $setore): RedirectResponse
     {
         $validated = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'sigla' => ['required', 'string', 'max:10'],
-            'ativo' => ['boolean'],
+            'ativo' => ['nullable'],
         ]);
 
-        $setor->update([
+        $setore->update([
             'nome' => $validated['nome'],
             'sigla' => $validated['sigla'],
             'ativo' => $request->has('ativo'),
@@ -89,21 +89,21 @@ class SetorController extends Controller
             ->with('success', 'Setor atualizado com sucesso!');
     }
 
-    public function destroy(Setor $setor): RedirectResponse
+    public function destroy(Setor $setore): RedirectResponse
     {
-        if ($setor->usuarios()->count() > 0) {
+        if ($setore->usuarios()->count() > 0) {
             return redirect()
                 ->route('admin.setores.index')
                 ->with('error', 'Não é possível deletar um setor que possui usuários vinculados.');
         }
 
-        if ($setor->servidores()->count() > 0) {
+        if ($setore->servidores()->count() > 0) {
             return redirect()
                 ->route('admin.setores.index')
                 ->with('error', 'Não é possível deletar um setor que possui servidores vinculados.');
         }
 
-        $setor->delete();
+        $setore->delete();
 
         return redirect()
             ->route('admin.setores.index')

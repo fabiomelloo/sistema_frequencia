@@ -50,11 +50,13 @@ Route::middleware(['auth'])->group(function () {
             Route::resource('setores', SetorController::class);
             Route::resource('servidores', ServidorController::class);
             Route::resource('eventos', EventoController::class);
-            
             Route::get('permissoes', [PermissaoController::class, 'index'])->name('permissoes.index');
             Route::post('permissoes', [PermissaoController::class, 'store'])->name('permissoes.store');
             Route::delete('permissoes/{setor}/{evento}', [PermissaoController::class, 'destroy'])->name('permissoes.destroy');
             Route::post('permissoes/{setor}/{evento}/toggle', [PermissaoController::class, 'toggle'])->name('permissoes.toggle');
+            Route::delete('servidores/{servidor}/desativar', [ServidorController::class, 'destroy'])->name('servidores.destroy');
+            Route::post('servidores/{servidor}/ativar', [ServidorController::class, 'ativar'])->name('servidores.ativar');
         });
     });
 });
+

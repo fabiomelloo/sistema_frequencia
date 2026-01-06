@@ -43,7 +43,7 @@ class ServidorController extends Controller
             'nome' => ['required', 'string', 'max:255'],
             'setor_id' => ['required', 'exists:setores,id'],
             'origem_registro' => ['nullable', 'string', 'max:255'],
-            'ativo' => ['boolean'],
+            'ativo' => ['nullable'],
         ]);
 
         Servidor::create([
@@ -51,7 +51,7 @@ class ServidorController extends Controller
             'nome' => $validated['nome'],
             'setor_id' => $validated['setor_id'],
             'origem_registro' => $validated['origem_registro'] ?? null,
-            'ativo' => $request->has('ativo'),
+            'ativo' => $request['ativo'],
         ]);
 
         return redirect()
@@ -85,7 +85,7 @@ class ServidorController extends Controller
             'nome' => ['required', 'string', 'max:255'],
             'setor_id' => ['required', 'exists:setores,id'],
             'origem_registro' => ['nullable', 'string', 'max:255'],
-            'ativo' => ['boolean'],
+            'ativo' => ['nullable'],
         ]);
 
         $servidor->update([
@@ -93,7 +93,7 @@ class ServidorController extends Controller
             'nome' => $validated['nome'],
             'setor_id' => $validated['setor_id'],
             'origem_registro' => $validated['origem_registro'] ?? null,
-            'ativo' => $request->has('ativo'),
+            'ativo' => $request['ativo'],
         ]);
 
         return redirect()

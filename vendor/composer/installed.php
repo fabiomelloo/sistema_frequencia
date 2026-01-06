@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'sistema-frequencia/sistema-frequencia',
-        'pretty_version' => '1.0.0+no-version-set',
-        'version' => '1.0.0.0',
-        'reference' => null,
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => '8a8880f04e740460a85197fc031b4a0c65b4146f',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -978,9 +978,9 @@
             'dev_requirement' => true,
         ),
         'sistema-frequencia/sistema-frequencia' => array(
-            'pretty_version' => '1.0.0+no-version-set',
-            'version' => '1.0.0.0',
-            'reference' => null,
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '8a8880f04e740460a85197fc031b4a0c65b4146f',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

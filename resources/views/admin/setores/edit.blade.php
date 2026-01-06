@@ -12,7 +12,7 @@
 
     <div class="card">
         <div class="card-body">
-            <form method="POST" action="{{ route('admin.setores.update', $setor) }}">
+            <form method="POST" action="{{ route('admin.setores.update', ['setore' => $setor->id]) }}">
                 @csrf
                 @method('PUT')
 

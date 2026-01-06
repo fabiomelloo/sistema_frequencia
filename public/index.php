@@ -1,23 +1,20 @@
 <?php
 
-/*
-|--------------------------------------------------------------------------
-| Sistema de Frequência - Tela de Apresentação
-|--------------------------------------------------------------------------
-|
-| Esta é uma versão simplificada para demonstração.
-| Para usar a aplicação completa, instale via Composer:
-| composer install
-|
-*/
+define('LARAVEL_START', microtime(true));
 
-// Definir path base
-define('BASE_PATH', realpath(__DIR__ . '/..'));
+require __DIR__.'/../vendor/autoload.php';
 
-// Detectar requisição
-$request_uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$request_path = str_replace('/index.php', '', $request_uri);
-$request_path = ltrim($request_path, '/');
+$app = require_once __DIR__.'/../bootstrap/app.php';
+
+$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
+
+$response = $kernel->handle(
+    $request = Illuminate\Http\Request::capture()
+);
+
+$response->send();
+
+$kernel->terminate($request, $response);
 
 // Rotas simples
 if ($request_path === '' || $request_path === '/') {
