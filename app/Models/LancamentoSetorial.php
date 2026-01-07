@@ -12,9 +12,14 @@ class LancamentoSetorial extends Model
         'servidor_id',
         'evento_id',
         'setor_origem_id',
-        'dias_lancados',
+        'dias_trabalhados',
+        'dias_noturnos',
         'valor',
+        'valor_gratificacao',
         'porcentagem_insalubridade',
+        'porcentagem_periculosidade',
+        'adicional_turno',
+        'adicional_noturno',
         'observacao',
         'status',
         'motivo_rejeicao',
@@ -28,6 +33,14 @@ class LancamentoSetorial extends Model
         'exportado_em' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'dias_trabalhados' => 'integer',
+        'dias_noturnos' => 'integer',
+        'valor' => 'decimal:2',
+        'valor_gratificacao' => 'decimal:2',
+        'porcentagem_insalubridade' => 'integer',
+        'porcentagem_periculosidade' => 'integer',
+        'adicional_turno' => 'decimal:2',
+        'adicional_noturno' => 'decimal:2',
     ];
 
     public function servidor(): BelongsTo
@@ -38,11 +51,6 @@ class LancamentoSetorial extends Model
     public function evento(): BelongsTo
     {
         return $this->belongsTo(EventoFolha::class, 'evento_id');
-        return $this->belongsTo(EventoFolha::class, 'evento_id')->with('setoresComDireito');
-        
-    {
-        return $this->belongsTo(EventoFolha::class, 'evento_id');
-    }
     }
 
     public function setorOrigem(): BelongsTo

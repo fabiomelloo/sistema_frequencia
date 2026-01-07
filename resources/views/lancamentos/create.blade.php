@@ -62,9 +62,9 @@
 
                 <div class="row mb-3" id="dias-container" style="display: none;">
                     <div class="col-md-6">
-                        <label for="dias_lancados" class="form-label">Dias Lançados</label>
-                        <input type="number" name="dias_lancados" id="dias_lancados" class="form-control @error('dias_lancados') is-invalid @enderror" min="0" value="{{ old('dias_lancados') }}">
-                        @error('dias_lancados')
+                        <label for="dias_trabalhados" class="form-label">Dias Trabalhados</label>
+                        <input type="number" name="dias_trabalhados" id="dias_trabalhados" class="form-control @error('dias_trabalhados') is-invalid @enderror" min="0" value="{{ old('dias_trabalhados') }}">
+                        @error('dias_trabalhados')
                             <span class="invalid-feedback">{{ $message }}</span>
                         @enderror
                     </div>
@@ -132,8 +132,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('porcentagem-container').style.display = exigePorcentagem ? 'block' : 'none';
         document.getElementById('observacao-container').style.display = exigeObservacao ? 'block' : 'none';
         
-        if (exigeDias) document.getElementById('dias_lancados').required = true;
-        else document.getElementById('dias_lancados').required = false;
+        if (exigeDias) document.getElementById('dias_trabalhados').required = true;
+        else document.getElementById('dias_trabalhados').required = false;
         
         if (exigeValor) document.getElementById('valor').required = true;
         else document.getElementById('valor').required = false;

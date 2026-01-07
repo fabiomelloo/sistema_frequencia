@@ -3,69 +3,142 @@
 namespace App\Services;
 
 use App\Models\LancamentoSetorial;
+use App\Models\ExportacaoFolha;
+use App\Enums\LancamentoStatus;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Exception;
 
 class GeradorTxtFolhaService
 {
-    /**
-     * Gera arquivo TXT com layout de largura fixa
-     * Formato: EVENTO (10 pos) + MATRÍCULA (13 pos) + VALOR (14 pos) = 37 caracteres
-     * 
-     * @return array Retorna ['nomeArquivo' => string, 'idsExportados' => Collection]
-     */
+    private const TAMANHO_CODIGO_EVENTO = 10;
+    private const TAMANHO_MATRICULA = 13;
+    private const TAMANHO_VALOR = 14;
+    private const TAMANHO_LINHA = 37;
+
     public function gerar(): array
     {
-        $lancamentos = LancamentoSetorial::where('status', 'CONFERIDO')
-            ->whereNotNull('valor') // Apenas lançamentos com valor
-            ->where('valor', '>', 0) // Valor maior que zero
+        $lancamentos = LancamentoSetorial::where('status', LancamentoStatus::CONFERIDO->value)
             ->with(['evento', 'servidor'])
             ->get();
 
         if ($lancamentos->isEmpty()) {
-            throw new Exception('Nenhum lançamento conferido com valor para exportação.');
+            throw new Exception('Nenhum lançamento conferido para exportação.');
         }
 
         $conteudo = '';
         $idsExportados = collect();
 
-        foreach ($lancamentos as $l) {
-            // Validar dados obrigatórios
-            if (empty($l->evento->codigo_evento) || empty($l->servidor->matricula) || is_null($l->valor)) {
-                throw new Exception("Lançamento #{$l->id} possui dados incompletos para exportação.");
-            }
+        foreach ($lancamentos as $lancamento) {
+            $this->validarDadosObrigatorios($lancamento);
 
-            // Formatar código do evento (10 posições, zero à esquerda)
-            $codigoEvento = str_pad($l->evento->codigo_evento, 10, '0', STR_PAD_LEFT);
-
-            // Formatar matrícula (13 posições, zero à esquerda)
-            $matricula = str_pad($l->servidor->matricula, 13, '0', STR_PAD_LEFT);
-
-            // Formatar valor (14 posições, sem ponto/vírgula, 2 casas implícitas)
-            $valorFormatado = number_format($l->valor, 2, '', '');
-            $valor = str_pad($valorFormatado, 14, '0', STR_PAD_LEFT);
-
-            // Montar linha com exatamente 37 caracteres
-            $linha = $codigoEvento . $matricula . $valor;
-
-            // Validação
-            if (strlen($linha) !== 37) {
-                throw new Exception("Erro ao gerar linha: comprimento inválido ({$l->id})");
-            }
+            $linha = $this->formatarLinha($lancamento);
+            $this->validarTamanhoLinha($linha, $lancamento->id);
 
             $conteudo .= $linha . PHP_EOL;
-            $idsExportados->push($l->id);
+            $idsExportados->push($lancamento->id);
         }
 
-        // Gerar nome do arquivo: LOTE_YYYYmm.txt
-        $nomeArquivo = 'LOTE_' . now()->format('Ym') . '.txt';
+        $nomeArquivo = $this->gerarNomeArquivo();
+        $hashArquivo = hash('sha256', $conteudo);
+        
+        $this->salvarArquivo($nomeArquivo, $conteudo);
 
-        // Salvar no storage
-        $caminho = storage_path("app/{$nomeArquivo}");
-        file_put_contents($caminho, $conteudo);
+        $exportacao = ExportacaoFolha::create([
+            'periodo' => now()->format('Ym'),
+            'nome_arquivo' => $nomeArquivo,
+            'hash_arquivo' => $hashArquivo,
+            'usuario_id' => auth()->id(),
+            'quantidade_lancamentos' => $lancamentos->count(),
+            'data_exportacao' => now(),
+        ]);
+
+        $exportacao->lancamentos()->attach($idsExportados->toArray());
+
+        Log::info('Exportação de folha realizada', [
+            'exportacao_id' => $exportacao->id,
+            'arquivo' => $nomeArquivo,
+            'quantidade' => $lancamentos->count(),
+            'usuario_id' => auth()->id(),
+            'hash' => $hashArquivo,
+        ]);
 
         return [
             'nomeArquivo' => $nomeArquivo,
             'idsExportados' => $idsExportados,
+            'exportacaoId' => $exportacao->id,
         ];
+    }
+
+    private function validarDadosObrigatorios(LancamentoSetorial $lancamento): void
+    {
+        if (empty($lancamento->evento->codigo_evento)) {
+            throw new Exception("Lançamento #{$lancamento->id}: código do evento não informado.");
+        }
+
+        if (empty($lancamento->servidor->matricula)) {
+            throw new Exception("Lançamento #{$lancamento->id}: matrícula do servidor não informada.");
+        }
+
+        if (strlen($lancamento->evento->codigo_evento) > self::TAMANHO_CODIGO_EVENTO) {
+            throw new Exception(
+                "Lançamento #{$lancamento->id}: código do evento excede tamanho máximo (" . 
+                self::TAMANHO_CODIGO_EVENTO . " caracteres)."
+            );
+        }
+
+        if (strlen($lancamento->servidor->matricula) > self::TAMANHO_MATRICULA) {
+            throw new Exception(
+                "Lançamento #{$lancamento->id}: matrícula excede tamanho máximo (" . 
+                self::TAMANHO_MATRICULA . " caracteres)."
+            );
+        }
+    }
+
+    private function formatarLinha(LancamentoSetorial $lancamento): string
+    {
+        $codigoEvento = $this->formatarCodigoEvento($lancamento->evento->codigo_evento);
+        $matricula = $this->formatarMatricula($lancamento->servidor->matricula);
+        $valor = $this->formatarValor($lancamento->valor ?? 0.00);
+
+        return $codigoEvento . $matricula . $valor;
+    }
+
+    private function formatarCodigoEvento(string $codigo): string
+    {
+        return str_pad($codigo, self::TAMANHO_CODIGO_EVENTO, '0', STR_PAD_LEFT);
+    }
+
+    private function formatarMatricula(string $matricula): string
+    {
+        return str_pad($matricula, self::TAMANHO_MATRICULA, '0', STR_PAD_LEFT);
+    }
+
+    private function formatarValor(float $valor): string
+    {
+        $valorFormatado = number_format($valor, 2, '', '');
+        return str_pad($valorFormatado, self::TAMANHO_VALOR, '0', STR_PAD_LEFT);
+    }
+
+    private function validarTamanhoLinha(string $linha, int $lancamentoId): void
+    {
+        if (strlen($linha) !== self::TAMANHO_LINHA) {
+            throw new Exception(
+                "Erro ao gerar linha do lançamento #{$lancamentoId}: " .
+                "comprimento inválido (" . strlen($linha) . " caracteres, esperado " . 
+                self::TAMANHO_LINHA . ")."
+            );
+        }
+    }
+
+    private function gerarNomeArquivo(): string
+    {
+        return 'LOTE_' . now()->format('Ym') . '.txt';
+    }
+
+    private function salvarArquivo(string $nomeArquivo, string $conteudo): void
+    {
+        $caminho = storage_path("app/{$nomeArquivo}");
+        file_put_contents($caminho, $conteudo);
     }
 }

@@ -1,13 +1,11 @@
-@extends('layouts.app')
-
-@section('content')
+<?php $__env->startSection('content'); ?>
 <div class="container">
     <div class="row mb-4">
         <div class="col-md-8">
             <h2>Detalhes do Lançamento</h2>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{{ route('lancamentos.index') }}" class="btn btn-secondary">Voltar</a>
+            <a href="<?php echo e(route('painel.index')); ?>" class="btn btn-secondary">Voltar</a>
         </div>
     </div>
 
@@ -17,120 +15,133 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         Informações do Lançamento
-                        @if ($lancamento->isPendente())
-                            <span class="badge bg-warning text-dark float-end">PENDENTE</span>
-                        @elseif ($lancamento->isConferido())
+                        <?php if($lancamento->isPendente()): ?>
+                            <span class="badge bg-danger float-end">PENDENTE</span>
+                        <?php elseif($lancamento->isConferido()): ?>
                             <span class="badge bg-success float-end">CONFERIDO</span>
-                        @elseif ($lancamento->isRejeitado())
-                            <span class="badge bg-danger float-end">REJEITADO</span>
-                        @elseif ($lancamento->isExportado())
+                        <?php elseif($lancamento->isRejeitado()): ?>
+                            <span class="badge bg-warning float-end">REJEITADO</span>
+                        <?php elseif($lancamento->isExportado()): ?>
                             <span class="badge bg-secondary float-end">EXPORTADO</span>
-                        @endif
+                        <?php endif; ?>
                     </h5>
                 </div>
                 <div class="card-body">
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <strong>Matrícula do Servidor:</strong><br>
-                            {{ $lancamento->servidor->matricula }}
+                            <?php echo e($lancamento->servidor->matricula); ?>
+
                         </div>
                         <div class="col-md-6">
                             <strong>Nome do Servidor:</strong><br>
-                            {{ $lancamento->servidor->nome }}
+                            <?php echo e($lancamento->servidor->nome); ?>
+
                         </div>
                     </div>
 
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <strong>Setor de Origem:</strong><br>
-                            {{ $lancamento->setorOrigem->nome }} ({{ $lancamento->setorOrigem->sigla }})
+                            <?php echo e($lancamento->setorOrigem->nome); ?> (<?php echo e($lancamento->setorOrigem->sigla); ?>)
                         </div>
                         <div class="col-md-6">
                             <strong>Evento:</strong><br>
-                            {{ $lancamento->evento->codigo_evento }} - {{ $lancamento->evento->descricao }}
+                            <?php echo e($lancamento->evento->codigo_evento); ?> - <?php echo e($lancamento->evento->descricao); ?>
+
                         </div>
                     </div>
 
-                    @if ($lancamento->dias_trabalhados)
+                    <?php if($lancamento->dias_trabalhados): ?>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <strong>Dias Trabalhados:</strong><br>
-                                {{ $lancamento->dias_trabalhados }}
+                                <?php echo e($lancamento->dias_trabalhados); ?>
+
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
 
-                    @if ($lancamento->valor)
+                    <?php if($lancamento->valor): ?>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <strong>Valor:</strong><br>
-                                R$ {{ number_format($lancamento->valor, 2, ',', '.') }}
+                                R$ <?php echo e(number_format($lancamento->valor, 2, ',', '.')); ?>
+
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
 
-                    @if ($lancamento->porcentagem_insalubridade)
+                    <?php if($lancamento->porcentagem_insalubridade): ?>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <strong>Porcentagem de Insalubridade:</strong><br>
-                                {{ $lancamento->porcentagem_insalubridade }}%
+                                <?php echo e($lancamento->porcentagem_insalubridade); ?>%
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
 
-                    @if ($lancamento->observacao)
+                    <?php if($lancamento->observacao): ?>
                         <div class="row mb-3">
                             <div class="col-md-12">
                                 <strong>Observação:</strong><br>
-                                {{ $lancamento->observacao }}
+                                <?php echo e($lancamento->observacao); ?>
+
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
 
                     <hr>
 
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <strong>Data de Lançamento:</strong><br>
-                            {{ $lancamento->created_at->format('d/m/Y H:i:s') }}
+                            <?php echo e($lancamento->created_at->format('d/m/Y H:i:s')); ?>
+
                         </div>
                     </div>
 
-                    @if ($lancamento->validated_at)
+                    <?php if($lancamento->validated_at): ?>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <strong>Data de Validação:</strong><br>
-                                {{ $lancamento->validated_at->format('d/m/Y H:i:s') }}
+                                <?php echo e($lancamento->validated_at->format('d/m/Y H:i:s')); ?>
+
                             </div>
                             <div class="col-md-6">
                                 <strong>Validado por:</strong><br>
-                                {{ $lancamento->validador->name ?? 'N/A' }}
+                                <?php echo e($lancamento->validador->name); ?>
+
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
 
-                    @if ($lancamento->isRejeitado() && $lancamento->motivo_rejeicao)
+                    <?php if($lancamento->isRejeitado() && $lancamento->motivo_rejeicao): ?>
                         <div class="row mb-3">
                             <div class="col-md-12">
                                 <strong>Motivo da Rejeição:</strong><br>
                                 <div class="alert alert-warning mb-0">
-                                    {{ $lancamento->motivo_rejeicao }}
+                                    <?php echo e($lancamento->motivo_rejeicao); ?>
+
                                 </div>
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
 
-                    @if ($lancamento->exportado_em)
+                    <?php if($lancamento->exportado_em): ?>
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <strong>Exportado em:</strong><br>
-                                {{ $lancamento->exportado_em->format('d/m/Y H:i:s') }}
+                                <?php echo e($lancamento->exportado_em->format('d/m/Y H:i:s')); ?>
+
                             </div>
                         </div>
-                    @endif
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
 </div>
-@endsection
+<?php $__env->stopSection(); ?>
+
+<?php echo $__env->make('layouts.app', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH /var/www/html/resources/views/painel/show.blade.php ENDPATH**/ ?>

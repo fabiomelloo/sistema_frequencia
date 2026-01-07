@@ -29,7 +29,7 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label for="codigo_evento" class="form-label">Código do Evento</label>
+                        <label for="codigo_evento" class="form-label">Código do Evento <span class="text-danger">*</span></label>
                         <input type="text" class="form-control @error('codigo_evento') is-invalid @enderror" 
                                id="codigo_evento" name="codigo_evento" value="{{ old('codigo_evento') }}" required>
                         @error('codigo_evento')
@@ -38,7 +38,25 @@
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label for="descricao" class="form-label">Descrição</label>
+                        <label for="tipo_evento" class="form-label">Tipo de Evento <span class="text-danger">*</span></label>
+                        <select class="form-control @error('tipo_evento') is-invalid @enderror" 
+                                id="tipo_evento" name="tipo_evento" required>
+                            <option value="">-- Selecione --</option>
+                            @foreach(\App\Enums\TipoEvento::cases() as $tipo)
+                                <option value="{{ $tipo->value }}" @selected(old('tipo_evento') == $tipo->value)>
+                                    {{ $tipo->label() }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('tipo_evento')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="descricao" class="form-label">Descrição <span class="text-danger">*</span></label>
                         <input type="text" class="form-control @error('descricao') is-invalid @enderror" 
                                id="descricao" name="descricao" value="{{ old('descricao') }}" required>
                         @error('descricao')
@@ -99,7 +117,7 @@
                     <div class="col-md-6 mb-3">
                         <div class="form-check">
                             <input type="checkbox" class="form-check-input" id="exige_porcentagem" name="exige_porcentagem" {{ old('exige_porcentagem') ? 'checked' : '' }}>
-                            <label class="form-check-label" for="exige_porcentagem">Exige Porcentagem (Insalubridade)</label>
+                            <label class="form-check-label" for="exige_porcentagem">Exige Porcentagem (Insalubridade/Periculosidade)</label>
                         </div>
                     </div>
                 </div>

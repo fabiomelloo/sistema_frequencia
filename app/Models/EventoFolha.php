@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TipoEvento;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,6 +12,7 @@ class EventoFolha extends Model
     protected $table = 'eventos_folha';
     protected $fillable = [
         'codigo_evento',
+        'tipo_evento',
         'descricao',
         'exige_dias',
         'exige_valor',
@@ -20,6 +22,10 @@ class EventoFolha extends Model
         'exige_observacao',
         'exige_porcentagem',
         'ativo'
+    ];
+
+    protected $casts = [
+        'tipo_evento' => TipoEvento::class,
     ];
 
     public function setoresComDireito(): BelongsToMany

@@ -7,6 +7,8 @@ use App\Models\EventoFolha;
 
 class StoreLancamentoSetorialRequest extends FormRequest
 {
+    private ?EventoFolha $eventoCache = null;
+
     public function authorize(): bool
     {
         return true;
@@ -15,8 +17,9 @@ class StoreLancamentoSetorialRequest extends FormRequest
     public function rules(): array
     {
         $user = auth()->user();
+        $evento = $this->getEvento(); // Cache da query
 
-        return [
+        $rules = [
             'servidor_id' => [
                 'required',
                 'exists:servidores,id',
@@ -36,9 +39,9 @@ class StoreLancamentoSetorialRequest extends FormRequest
             'evento_id' => [
                 'required',
                 'exists:eventos_folha,id',
-                function ($attribute, $value, $fail) use ($user) {
-                    $evento = EventoFolha::find($value);
+                function ($attribute, $value, $fail) use ($user, $evento) {
                     if (!$evento) {
+                        $fail('Evento inválido.');
                         return;
                     }
                     if (!$evento->ativo) {
@@ -49,17 +52,26 @@ class StoreLancamentoSetorialRequest extends FormRequest
                     }
                 },
             ],
-            'dias_lancados' => [
+            'dias_trabalhados' => [
+                'nullable',
+                'integer',
+                'min:0',
+                function ($attribute, $value, $fail) use ($evento) {
+                    if ($evento && $evento->exige_dias && is_null($value)) {
+                        $fail('Dias trabalhados é obrigatório para este evento.');
+                    }
+                    if ($evento && $evento->dias_maximo && $value > $evento->dias_maximo) {
+                        $fail("Máximo de dias permitido: {$evento->dias_maximo}");
+                    }
+                },
+            ],
+            'dias_noturnos' => [
                 'nullable',
                 'integer',
                 'min:0',
                 function ($attribute, $value, $fail) {
-                    $evento = EventoFolha::find($this->evento_id);
-                    if ($evento && $evento->exige_dias && is_null($value)) {
-                        $fail('Dias lançados é obrigatório para este evento.');
-                    }
-                    if ($evento && $evento->dias_maximo && $value > $evento->dias_maximo) {
-                        $fail("Máximo de dias permitido: {$evento->dias_maximo}");
+                    if ($value && $this->dias_trabalhados && $value > $this->dias_trabalhados) {
+                        $fail('Dias noturnos não podem ser maiores que dias trabalhados.');
                     }
                 },
             ],
@@ -67,8 +79,7 @@ class StoreLancamentoSetorialRequest extends FormRequest
                 'nullable',
                 'numeric',
                 'min:0',
-                function ($attribute, $value, $fail) {
-                    $evento = EventoFolha::find($this->evento_id);
+                function ($attribute, $value, $fail) use ($evento) {
                     if ($evento && $evento->exige_valor && is_null($value)) {
                         $fail('Valor é obrigatório para este evento.');
                     }
@@ -80,12 +91,32 @@ class StoreLancamentoSetorialRequest extends FormRequest
                     }
                 },
             ],
+            'valor_gratificacao' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+            'porcentagem' => [
+                'nullable',
+                'numeric',
+                'min:0',
+                'max:100',
+            ],
+            'adicional_turno' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+            'adicional_noturno' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
             'porcentagem_insalubridade' => [
                 'nullable',
                 'integer',
                 'in:10,20,40',
-                function ($attribute, $value, $fail) {
-                    $evento = EventoFolha::find($this->evento_id);
+                function ($attribute, $value, $fail) use ($evento) {
                     if ($evento && $evento->exige_porcentagem && is_null($value)) {
                         $fail('Porcentagem de insalubridade é obrigatória para este evento.');
                     }
@@ -94,18 +125,36 @@ class StoreLancamentoSetorialRequest extends FormRequest
                     }
                 },
             ],
+            'porcentagem_periculosidade' => [
+                'nullable',
+                'integer',
+                'in:30', // Periculosidade geralmente é 30%
+            ],
             'observacao' => [
                 'nullable',
                 'string',
                 'max:1000',
-                function ($attribute, $value, $fail) {
-                    $evento = EventoFolha::find($this->evento_id);
+                function ($attribute, $value, $fail) use ($evento) {
                     if ($evento && $evento->exige_observacao && is_null($value)) {
                         $fail('Observação é obrigatória para este evento.');
                     }
                 },
             ],
         ];
+
+        return $rules;
+    }
+
+    /**
+     * Cache do evento para evitar múltiplas queries
+     */
+    protected function getEvento(): ?EventoFolha
+    {
+        if ($this->eventoCache === null && $this->has('evento_id')) {
+            $this->eventoCache = EventoFolha::find($this->evento_id);
+        }
+        
+        return $this->eventoCache;
     }
 
     public function messages(): array
@@ -115,8 +164,8 @@ class StoreLancamentoSetorialRequest extends FormRequest
             'servidor_id.exists' => 'Servidor inválido.',
             'evento_id.required' => 'Selecione um evento.',
             'evento_id.exists' => 'Evento inválido.',
-            'dias_lancados.integer' => 'Dias deve ser um número inteiro.',
-            'dias_lancados.min' => 'Dias não pode ser negativo.',
+            'dias_trabalhados.integer' => 'Dias trabalhados deve ser um número inteiro.',
+            'dias_trabalhados.min' => 'Dias trabalhados não pode ser negativo.',
             'valor.numeric' => 'Valor deve ser um número.',
             'valor.min' => 'Valor não pode ser negativo.',
             'observacao.max' => 'Observação não pode ter mais de 1000 caracteres.',

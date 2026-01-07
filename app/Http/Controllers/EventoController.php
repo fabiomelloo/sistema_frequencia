@@ -33,17 +33,14 @@ class EventoController extends Controller
     public function store(Request $request): RedirectResponse
     {
         try {
-            // Preparar dados - converter strings vazias para null e checkboxes para boolean
             $data = $request->all();
             
-            // Converter checkboxes para boolean (checkboxes HTML enviam "on" quando marcados)
             $data['exige_dias'] = $request->has('exige_dias') ? true : false;
             $data['exige_valor'] = $request->has('exige_valor') ? true : false;
             $data['exige_observacao'] = $request->has('exige_observacao') ? true : false;
             $data['exige_porcentagem'] = $request->has('exige_porcentagem') ? true : false;
             $data['ativo'] = $request->has('ativo') ? true : false;
             
-            // Converter strings vazias para null
             $data['valor_minimo'] = $data['valor_minimo'] ?? null;
             $data['valor_maximo'] = $data['valor_maximo'] ?? null;
             $data['dias_maximo'] = $data['dias_maximo'] ?? null;
@@ -60,6 +57,7 @@ class EventoController extends Controller
 
             $rules = [
                 'codigo_evento' => ['required', 'string', 'max:20', 'unique:eventos_folha,codigo_evento'],
+                'tipo_evento' => ['required', 'string', 'in:' . implode(',', \App\Enums\TipoEvento::valores())],
                 'descricao' => ['required', 'string', 'max:255'],
                 'exige_dias' => ['required', 'boolean'],
                 'exige_valor' => ['required', 'boolean'],
@@ -70,7 +68,6 @@ class EventoController extends Controller
                 'ativo' => ['required', 'boolean'],
             ];
 
-            // Validar dias_maximo apenas se não for null
             if ($data['dias_maximo'] !== null) {
                 $rules['dias_maximo'] = ['integer', 'min:1'];
             } else {
@@ -87,12 +84,10 @@ class EventoController extends Controller
                 'dias_maximo.min' => 'O dias máximo deve ser pelo menos 1.',
             ])->validate();
 
-            // Converter strings vazias para null
             $valorMinimo = !empty($validated['valor_minimo']) ? $validated['valor_minimo'] : null;
             $valorMaximo = !empty($validated['valor_maximo']) ? $validated['valor_maximo'] : null;
             $diasMaximo = !empty($validated['dias_maximo']) ? $validated['dias_maximo'] : null;
 
-            // Validação customizada: valor_maximo deve ser maior que valor_minimo quando ambos existem
             if ($valorMaximo !== null && $valorMinimo !== null) {
                 if ($valorMaximo <= $valorMinimo) {
                     return redirect()
@@ -104,6 +99,7 @@ class EventoController extends Controller
 
             $evento = EventoFolha::create([
                 'codigo_evento' => $validated['codigo_evento'],
+                'tipo_evento' => $validated['tipo_evento'],
                 'descricao' => $validated['descricao'],
                 'exige_dias' => $validated['exige_dias'],
                 'exige_valor' => $validated['exige_valor'],
@@ -144,17 +140,14 @@ class EventoController extends Controller
 
     public function update(Request $request, EventoFolha $evento): RedirectResponse
     {
-        // Preparar dados - converter checkboxes para boolean
         $data = $request->all();
         
-        // Converter checkboxes para boolean
         $data['exige_dias'] = $request->has('exige_dias') ? true : false;
         $data['exige_valor'] = $request->has('exige_valor') ? true : false;
         $data['exige_observacao'] = $request->has('exige_observacao') ? true : false;
-        $data['exige_porcentagem'] = $request->has('exige_porcentagem') ? true : false;
-        $data['ativo'] = $request->has('ativo') ? true : false;
+            $data['exige_porcentagem'] = $request->has('exige_porcentagem') ? true : false;
+            $data['ativo'] = $request->has('ativo') ? true : false;
         
-        // Converter strings vazias para null
         if (isset($data['valor_minimo']) && $data['valor_minimo'] === '') {
             $data['valor_minimo'] = null;
         }
@@ -167,6 +160,7 @@ class EventoController extends Controller
 
         $rules = [
             'codigo_evento' => ['required', 'string', 'max:20', 'unique:eventos_folha,codigo_evento,' . $evento->id],
+            'tipo_evento' => ['required', 'string', 'in:' . implode(',', \App\Enums\TipoEvento::valores())],
             'descricao' => ['required', 'string', 'max:255'],
             'exige_dias' => ['required', 'boolean'],
             'exige_valor' => ['required', 'boolean'],
@@ -174,10 +168,9 @@ class EventoController extends Controller
             'valor_maximo' => ['nullable', 'numeric', 'min:0'],
             'exige_observacao' => ['required', 'boolean'],
             'exige_porcentagem' => ['required', 'boolean'],
-            'ativo' => ['required', 'boolean'],
-        ];
+                'ativo' => ['required', 'boolean'],
+            ];
 
-        // Validar dias_maximo apenas se não for null
         if ($data['dias_maximo'] !== null) {
             $rules['dias_maximo'] = ['integer', 'min:1'];
         } else {
@@ -186,12 +179,10 @@ class EventoController extends Controller
 
         $validated = validator($data, $rules)->validate();
 
-        // Converter strings vazias para null
         $valorMinimo = !empty($validated['valor_minimo']) ? $validated['valor_minimo'] : null;
         $valorMaximo = !empty($validated['valor_maximo']) ? $validated['valor_maximo'] : null;
         $diasMaximo = !empty($validated['dias_maximo']) ? $validated['dias_maximo'] : null;
 
-        // Validação customizada: valor_maximo deve ser maior que valor_minimo quando ambos existem
         if ($valorMaximo !== null && $valorMinimo !== null) {
             if ($valorMaximo <= $valorMinimo) {
                 return redirect()
@@ -203,6 +194,7 @@ class EventoController extends Controller
 
         $evento->update([
             'codigo_evento' => $validated['codigo_evento'],
+            'tipo_evento' => $validated['tipo_evento'],
             'descricao' => $validated['descricao'],
             'exige_dias' => $validated['exige_dias'],
             'exige_valor' => $validated['exige_valor'],

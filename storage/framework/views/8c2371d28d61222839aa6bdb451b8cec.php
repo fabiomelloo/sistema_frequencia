@@ -29,7 +29,7 @@
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label for="codigo_evento" class="form-label">Código do Evento</label>
+                        <label for="codigo_evento" class="form-label">Código do Evento <span class="text-danger">*</span></label>
                         <input type="text" class="form-control <?php $__errorArgs = ['codigo_evento'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
@@ -52,7 +52,41 @@ unset($__errorArgs, $__bag); ?>
                     </div>
 
                     <div class="col-md-6 mb-3">
-                        <label for="descricao" class="form-label">Descrição</label>
+                        <label for="tipo_evento" class="form-label">Tipo de Evento <span class="text-danger">*</span></label>
+                        <select class="form-control <?php $__errorArgs = ['tipo_evento'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>" 
+                                id="tipo_evento" name="tipo_evento" required>
+                            <option value="">-- Selecione --</option>
+                            <?php $__currentLoopData = \App\Enums\TipoEvento::cases(); $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $tipo): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                                <option value="<?php echo e($tipo->value); ?>" <?php if(old('tipo_evento') == $tipo->value): echo 'selected'; endif; ?>>
+                                    <?php echo e($tipo->label()); ?>
+
+                                </option>
+                            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+                        </select>
+                        <?php $__errorArgs = ['tipo_evento'];
+$__bag = $errors->getBag($__errorArgs[1] ?? 'default');
+if ($__bag->has($__errorArgs[0])) :
+if (isset($message)) { $__messageOriginal = $message; }
+$message = $__bag->first($__errorArgs[0]); ?>
+                            <div class="invalid-feedback"><?php echo e($message); ?></div>
+                        <?php unset($message);
+if (isset($__messageOriginal)) { $message = $__messageOriginal; }
+endif;
+unset($__errorArgs, $__bag); ?>
+                        <small class="form-text text-muted">Tipo do evento para regras de negócio (desacopla de código)</small>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="descricao" class="form-label">Descrição <span class="text-danger">*</span></label>
                         <input type="text" class="form-control <?php $__errorArgs = ['descricao'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
@@ -169,7 +203,7 @@ unset($__errorArgs, $__bag); ?>
                     <div class="col-md-6 mb-3">
                         <div class="form-check">
                             <input type="checkbox" class="form-check-input" id="exige_porcentagem" name="exige_porcentagem" <?php echo e(old('exige_porcentagem') ? 'checked' : ''); ?>>
-                            <label class="form-check-label" for="exige_porcentagem">Exige Porcentagem (Insalubridade)</label>
+                            <label class="form-check-label" for="exige_porcentagem">Exige Porcentagem (Insalubridade/Periculosidade)</label>
                         </div>
                     </div>
                 </div>

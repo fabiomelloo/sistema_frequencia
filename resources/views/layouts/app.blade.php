@@ -85,8 +85,8 @@
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                                 <li>
-                                    <a class="dropdown-item" href="#">
-                                        <i class="bi bi-gear"></i> Perfil
+                                    <a class="dropdown-item" href="{{ route('perfil.show') }}">
+                                        <i class="bi bi-person"></i> Meu Perfil
                                     </a>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>

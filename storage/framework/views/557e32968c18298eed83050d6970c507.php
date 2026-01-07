@@ -1,8 +1,10 @@
+
+
 <?php $__env->startSection('content'); ?>
 <div class="container">
     <div class="row mb-4">
         <div class="col-md-8">
-            <h2>Novo Lançamento Setorial</h2>
+            <h2>Editar Lançamento</h2>
         </div>
         <div class="col-md-4 text-end">
             <a href="<?php echo e(route('lancamentos.index')); ?>" class="btn btn-secondary">Voltar</a>
@@ -23,8 +25,9 @@
 
     <div class="card">
         <div class="card-body">
-            <form action="<?php echo e(route('lancamentos.store')); ?>" method="POST">
+            <form action="<?php echo e(route('lancamentos.update', $lancamento)); ?>" method="POST">
                 <?php echo csrf_field(); ?>
+                <?php echo method_field('PUT'); ?>
 
                 <div class="row mb-3">
                     <div class="col-md-6">
@@ -39,7 +42,7 @@ endif;
 unset($__errorArgs, $__bag); ?>" required>
                             <option value="">-- Selecione --</option>
                             <?php $__currentLoopData = $servidores; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $servidor): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($servidor->id); ?>" <?php if(old('servidor_id') == $servidor->id): echo 'selected'; endif; ?>>
+                                <option value="<?php echo e($servidor->id); ?>" <?php if($lancamento->servidor_id == $servidor->id): echo 'selected'; endif; ?>>
                                     <?php echo e($servidor->matricula); ?> - <?php echo e($servidor->nome); ?>
 
                                 </option>
@@ -69,7 +72,7 @@ endif;
 unset($__errorArgs, $__bag); ?>" required>
                             <option value="">-- Selecione --</option>
                             <?php $__currentLoopData = $eventos; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $evento): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-                                <option value="<?php echo e($evento->id); ?>" data-exige-dias="<?php echo e($evento->exige_dias ? 1 : 0); ?>" data-exige-valor="<?php echo e($evento->exige_valor ? 1 : 0); ?>" data-exige-observacao="<?php echo e($evento->exige_observacao ? 1 : 0); ?>" data-exige-porcentagem="<?php echo e($evento->exige_porcentagem ? 1 : 0); ?>" <?php if(old('evento_id') == $evento->id): echo 'selected'; endif; ?>>
+                                <option value="<?php echo e($evento->id); ?>" data-exige-dias="<?php echo e($evento->exige_dias ? 1 : 0); ?>" data-exige-valor="<?php echo e($evento->exige_valor ? 1 : 0); ?>" data-exige-observacao="<?php echo e($evento->exige_observacao ? 1 : 0); ?>" data-exige-porcentagem="<?php echo e($evento->exige_porcentagem ? 1 : 0); ?>" <?php if($lancamento->evento_id == $evento->id): echo 'selected'; endif; ?>>
                                     <?php echo e($evento->codigo_evento); ?> - <?php echo e($evento->descricao); ?>
 
                                 </option>
@@ -98,7 +101,7 @@ if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
-unset($__errorArgs, $__bag); ?>" min="0" value="<?php echo e(old('dias_trabalhados')); ?>">
+unset($__errorArgs, $__bag); ?>" min="0" value="<?php echo e(old('dias_trabalhados', $lancamento->dias_trabalhados)); ?>">
                         <?php $__errorArgs = ['dias_trabalhados'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
@@ -122,7 +125,7 @@ if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
-unset($__errorArgs, $__bag); ?>" step="0.01" min="0" value="<?php echo e(old('valor')); ?>">
+unset($__errorArgs, $__bag); ?>" step="0.01" min="0" value="<?php echo e(old('valor', $lancamento->valor)); ?>">
                         <?php $__errorArgs = ['valor'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
@@ -148,9 +151,9 @@ if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
 unset($__errorArgs, $__bag); ?>">
                             <option value="">-- Selecione --</option>
-                            <option value="10" <?php if(old('porcentagem_insalubridade') == 10): echo 'selected'; endif; ?>>10%</option>
-                            <option value="20" <?php if(old('porcentagem_insalubridade') == 20): echo 'selected'; endif; ?>>20%</option>
-                            <option value="40" <?php if(old('porcentagem_insalubridade') == 40): echo 'selected'; endif; ?>>40%</option>
+                            <option value="10" <?php if(old('porcentagem_insalubridade', $lancamento->porcentagem_insalubridade) == 10): echo 'selected'; endif; ?>>10%</option>
+                            <option value="20" <?php if(old('porcentagem_insalubridade', $lancamento->porcentagem_insalubridade) == 20): echo 'selected'; endif; ?>>20%</option>
+                            <option value="40" <?php if(old('porcentagem_insalubridade', $lancamento->porcentagem_insalubridade) == 40): echo 'selected'; endif; ?>>40%</option>
                         </select>
                         <?php $__errorArgs = ['porcentagem_insalubridade'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
@@ -175,7 +178,7 @@ if (isset($message)) { $__messageOriginal = $message; }
 $message = $__bag->first($__errorArgs[0]); ?> is-invalid <?php unset($message);
 if (isset($__messageOriginal)) { $message = $__messageOriginal; }
 endif;
-unset($__errorArgs, $__bag); ?>" rows="3"><?php echo e(old('observacao')); ?></textarea>
+unset($__errorArgs, $__bag); ?>" rows="3"><?php echo e(old('observacao', $lancamento->observacao)); ?></textarea>
                         <?php $__errorArgs = ['observacao'];
 $__bag = $errors->getBag($__errorArgs[1] ?? 'default');
 if ($__bag->has($__errorArgs[0])) :
@@ -191,7 +194,7 @@ unset($__errorArgs, $__bag); ?>
 
                 <div class="row">
                     <div class="col-md-12">
-                        <button type="submit" class="btn btn-primary">Enviar Lançamento</button>
+                        <button type="submit" class="btn btn-primary">Atualizar Lançamento</button>
                         <a href="<?php echo e(route('lancamentos.index')); ?>" class="btn btn-secondary">Cancelar</a>
                     </div>
                 </div>
@@ -232,4 +235,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <?php $__env->stopSection(); ?>
 
-<?php echo $__env->make('layouts.app', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH /var/www/html/resources/views/lancamentos/create.blade.php ENDPATH**/ ?>
+<?php echo $__env->make('layouts.app', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH /var/www/html/resources/views/lancamentos/edit.blade.php ENDPATH**/ ?>

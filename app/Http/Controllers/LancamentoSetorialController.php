@@ -6,8 +6,10 @@ use App\Models\LancamentoSetorial;
 use App\Models\EventoFolha;
 use App\Models\Servidor;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
+use App\Services\RegrasLancamentoService;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use InvalidArgumentException;
 
 class LancamentoSetorialController extends Controller
 {
@@ -16,13 +18,11 @@ class LancamentoSetorialController extends Controller
         $user = auth()->user();
         $setor = $user->setor;
 
-        // Servidores do setor do usuário
         $servidores = Servidor::where('setor_id', $setor->id)
             ->where('ativo', true)
             ->orderBy('nome')
             ->get();
 
-        // Eventos permitidos para o setor - usando relacionamento do Setor
         $eventos = $setor->eventosPermitidos()
             ->where('eventos_folha.ativo', true)
             ->orderBy('eventos_folha.descricao')
@@ -34,27 +34,45 @@ class LancamentoSetorialController extends Controller
         ]);
     }
 
-    public function store(StoreLancamentoSetorialRequest $request): RedirectResponse
-    {
-        $user = auth()->user();
-        $validated = $request->validated();
+    public function store(
+        StoreLancamentoSetorialRequest $request,
+        RegrasLancamentoService $regrasService
+    ): RedirectResponse {
+        try {
+            $user = auth()->user();
+            $validated = $request->validated();
 
-        // Criar lançamento com status PENDENTE
-        // Validação de evento já está no Request
-        LancamentoSetorial::create([
-            'servidor_id' => $validated['servidor_id'],
-            'evento_id' => $validated['evento_id'],
-            'setor_origem_id' => $user->setor_id,
-            'dias_lancados' => $validated['dias_lancados'] ?? null,
-            'valor' => $validated['valor'] ?? null,
-            'porcentagem_insalubridade' => $validated['porcentagem_insalubridade'] ?? null,
-            'observacao' => $validated['observacao'] ?? null,
-            'status' => 'PENDENTE',
-        ]);
+            $servidor = Servidor::findOrFail($validated['servidor_id']);
+            $evento = EventoFolha::findOrFail($validated['evento_id']);
 
-        return redirect()
-            ->route('lancamentos.index')
-            ->with('success', 'Lançamento criado com sucesso!');
+            $regrasService->validar($servidor, $evento, $validated);
+
+            LancamentoSetorial::create([
+                'servidor_id' => $validated['servidor_id'],
+                'evento_id' => $validated['evento_id'],
+                'setor_origem_id' => $user->setor_id,
+                'dias_trabalhados' => $validated['dias_trabalhados'] ?? null,
+                'dias_noturnos' => $validated['dias_noturnos'] ?? null,
+                'valor' => $validated['valor'] ?? null,
+                'valor_gratificacao' => $validated['valor_gratificacao'] ?? null,
+                'porcentagem_insalubridade' => $validated['porcentagem_insalubridade'] ?? null,
+                'porcentagem_periculosidade' => $validated['porcentagem_periculosidade'] ?? null,
+                'adicional_turno' => $validated['adicional_turno'] ?? null,
+                'adicional_noturno' => $validated['adicional_noturno'] ?? null,
+                'observacao' => $validated['observacao'] ?? null,
+                'status' => 'PENDENTE',
+            ]);
+
+            return redirect()
+                ->route('lancamentos.index')
+                ->with('success', 'Lançamento criado com sucesso!');
+                
+        } catch (InvalidArgumentException $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
     }
 
     public function index(): View
@@ -76,8 +94,6 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
 
-        // Validar propriedade
-        
         if ($lancamento->setor_origem_id !== $user->setor_id) {
             abort(403, 'Não autorizado.');
         }
@@ -93,7 +109,6 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
 
-        // Validar propriedade e status
         if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
             abort(403, 'Não autorizado.');
         }
@@ -103,7 +118,6 @@ class LancamentoSetorialController extends Controller
             ->orderBy('nome')
             ->get();
 
-        // Eventos permitidos para o setor - usando relacionamento do Setor
         $setor = $user->setor;
         $eventos = $setor->eventosPermitidos()
             ->where('eventos_folha.ativo', true)
@@ -117,29 +131,49 @@ class LancamentoSetorialController extends Controller
         ]);
     }
 
-    public function update(StoreLancamentoSetorialRequest $request, LancamentoSetorial $lancamento): RedirectResponse
-    {
-        $user = auth()->user();
+    public function update(
+        StoreLancamentoSetorialRequest $request,
+        LancamentoSetorial $lancamento,
+        RegrasLancamentoService $regrasService
+    ): RedirectResponse {
+        try {
+            $user = auth()->user();
 
-        if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
-            abort(403, 'Não autorizado.');
+            if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
+                abort(403, 'Não autorizado.');
+            }
+
+            $validated = $request->validated();
+
+            $servidor = Servidor::findOrFail($validated['servidor_id']);
+            $evento = EventoFolha::findOrFail($validated['evento_id']);
+
+            $regrasService->validar($servidor, $evento, $validated);
+
+            $lancamento->update([
+                'servidor_id' => $validated['servidor_id'],
+                'evento_id' => $validated['evento_id'],
+                'dias_trabalhados' => $validated['dias_trabalhados'] ?? null,
+                'dias_noturnos' => $validated['dias_noturnos'] ?? null,
+                'valor' => $validated['valor'] ?? null,
+                'valor_gratificacao' => $validated['valor_gratificacao'] ?? null,
+                'porcentagem_insalubridade' => $validated['porcentagem_insalubridade'] ?? null,
+                'porcentagem_periculosidade' => $validated['porcentagem_periculosidade'] ?? null,
+                'adicional_turno' => $validated['adicional_turno'] ?? null,
+                'adicional_noturno' => $validated['adicional_noturno'] ?? null,
+                'observacao' => $validated['observacao'] ?? null,
+            ]);
+
+            return redirect()
+                ->route('lancamentos.index')
+                ->with('success', 'Lançamento atualizado com sucesso!');
+                
+        } catch (InvalidArgumentException $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['error' => $e->getMessage()]);
         }
-
-        $validated = $request->validated();
-
-        // Validação de evento já está no Request
-        $lancamento->update([
-            'servidor_id' => $validated['servidor_id'],
-            'evento_id' => $validated['evento_id'],
-            'dias_lancados' => $validated['dias_lancados'] ?? null,
-            'valor' => $validated['valor'] ?? null,
-            'porcentagem_insalubridade' => $validated['porcentagem_insalubridade'] ?? null,
-            'observacao' => $validated['observacao'] ?? null,
-        ]);
-
-        return redirect()
-            ->route('lancamentos.index')
-            ->with('success', 'Lançamento atualizado com sucesso!');
     }
 
     public function destroy(LancamentoSetorial $lancamento): RedirectResponse

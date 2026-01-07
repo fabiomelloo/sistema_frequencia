@@ -51,11 +51,11 @@
                         </div>
                     </div>
 
-                    @if ($lancamento->dias_lancados)
+                    @if ($lancamento->dias_trabalhados)
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <strong>Dias Lançados:</strong><br>
-                                {{ $lancamento->dias_lancados }}
+                                <strong>Dias Trabalhados:</strong><br>
+                                {{ $lancamento->dias_trabalhados }}
                             </div>
                         </div>
                     @endif

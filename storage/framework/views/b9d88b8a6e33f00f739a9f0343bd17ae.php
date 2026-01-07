@@ -54,11 +54,11 @@
                         </div>
                     </div>
 
-                    <?php if($lancamento->dias_lancados): ?>
+                    <?php if($lancamento->dias_trabalhados): ?>
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <strong>Dias Lançados:</strong><br>
-                                <?php echo e($lancamento->dias_lancados); ?>
+                                <strong>Dias Trabalhados:</strong><br>
+                                <?php echo e($lancamento->dias_trabalhados); ?>
 
                             </div>
                         </div>

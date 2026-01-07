@@ -8,6 +8,7 @@ use App\Http\Requests\RejeitarLancamentoRequest;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PainelConferenciaController extends Controller
 {
@@ -24,7 +25,6 @@ class PainelConferenciaController extends Controller
             ->orderBy('created_at', 'asc')
             ->paginate(15);
 
-        // Contadores para evitar queries nas views
         $contadores = [
             'PENDENTE' => LancamentoSetorial::where('status', 'PENDENTE')->count(),
             'CONFERIDO' => LancamentoSetorial::where('status', 'CONFERIDO')->count(),
@@ -48,7 +48,6 @@ class PainelConferenciaController extends Controller
 
     public function aprovar(LancamentoSetorial $lancamento): RedirectResponse
     {
-        // Validar que só pode aprovar se status é PENDENTE
         if (!$lancamento->isPendente()) {
             return redirect()
                 ->back()
@@ -68,7 +67,6 @@ class PainelConferenciaController extends Controller
 
     public function rejeitar(RejeitarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
     {
-        // Validar que só pode rejeitar se status é PENDENTE
         if (!$lancamento->isPendente()) {
             return redirect()
                 ->back()
@@ -89,13 +87,12 @@ class PainelConferenciaController extends Controller
             ->with('success', 'Lançamento rejeitado com sucesso!');
     }
 
-    public function exportar(): Response
+    public function exportar(): BinaryFileResponse|RedirectResponse
     {
         try {
-            $servico = new GeradorTxtFolhaService();
+            $servico = app(GeradorTxtFolhaService::class);
             $resultado = $servico->gerar();
 
-            // Marcar lançamentos como exportados (responsabilidade do Controller)
             LancamentoSetorial::whereIn('id', $resultado['idsExportados'])
                 ->update([
                     'status' => 'EXPORTADO',
@@ -105,10 +102,17 @@ class PainelConferenciaController extends Controller
             return response()
                 ->download(storage_path("app/{$resultado['nomeArquivo']}"))
                 ->deleteFileAfterSend(true);
+                
         } catch (\Exception $e) {
+            \Log::error('Erro ao exportar lançamentos', [
+                'erro' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'usuario_id' => auth()->id(),
+            ]);
+
             return redirect()
-                ->back()
-                ->withErrors(['export' => $e->getMessage()]);
+                ->route('painel.index')
+                ->withErrors(['error' => 'Erro ao exportar lançamentos: ' . $e->getMessage()]);
         }
     }
 }

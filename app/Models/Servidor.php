@@ -9,7 +9,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Servidor extends Model
 {
     protected $table = 'servidores';
-    protected $fillable = ['matricula', 'nome', 'setor_id', 'origem_registro', 'ativo'];
+    protected $fillable = [
+        'matricula', 
+        'nome', 
+        'setor_id', 
+        'origem_registro', 
+        'ativo',
+        'funcao_vigia',
+        'trabalha_noturno'
+    ];
 
     public function setor(): BelongsTo
     {

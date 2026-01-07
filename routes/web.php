@@ -9,6 +9,7 @@ use App\Http\Controllers\SetorController;
 use App\Http\Controllers\ServidorController;
 use App\Http\Controllers\EventoController;
 use App\Http\Controllers\PermissaoController;
+use App\Http\Controllers\PerfilController;
 
 // Rotas públicas
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
@@ -20,6 +21,12 @@ Route::get('/', [AuthController::class, 'home'])->middleware('auth')->name('home
 
 // Middleware de autenticação
 Route::middleware(['auth'])->group(function () {
+    
+    // ===== PERFIL (acessível para todos os usuários autenticados) =====
+    Route::prefix('perfil')->name('perfil.')->group(function () {
+        Route::get('/', [PerfilController::class, 'show'])->name('show');
+        Route::put('/', [PerfilController::class, 'update'])->name('update');
+    });
     
     // ===== SETORIAL (role: SETORIAL) =====
     Route::middleware(['role:SETORIAL'])->group(function () {
@@ -38,10 +45,17 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['role:CENTRAL'])->group(function () {
         Route::prefix('painel')->name('painel.')->group(function () {
             Route::get('/', [PainelConferenciaController::class, 'index'])->name('index');
-            Route::get('/{lancamento}', [PainelConferenciaController::class, 'show'])->name('show');
-            Route::post('/{lancamento}/aprovar', [PainelConferenciaController::class, 'aprovar'])->name('aprovar');
-            Route::post('/{lancamento}/rejeitar', [PainelConferenciaController::class, 'rejeitar'])->name('rejeitar');
             Route::post('/exportar', [PainelConferenciaController::class, 'exportar'])->name('exportar');
+            Route::get('/exportar', [PainelConferenciaController::class, 'exportar'])->name('exportar.get');
+            Route::get('/{lancamento}', [PainelConferenciaController::class, 'show'])
+                ->whereNumber('lancamento')
+                ->name('show');
+            Route::post('/{lancamento}/aprovar', [PainelConferenciaController::class, 'aprovar'])
+                ->whereNumber('lancamento')
+                ->name('aprovar');
+            Route::post('/{lancamento}/rejeitar', [PainelConferenciaController::class, 'rejeitar'])
+                ->whereNumber('lancamento')
+                ->name('rejeitar');
         });
 
         // ===== PAINEL ADMINISTRATIVO =====
