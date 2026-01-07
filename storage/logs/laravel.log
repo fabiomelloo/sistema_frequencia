@@ -10967,3 +10967,21 @@ CONTEXT:  unnamed portal parameter $1 = '...' at /var/www/html/vendor/laravel/fr
 #1 /var/www/html/public/index.php(20): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->{closure:Illuminate\\Foundation\\Bootstrap\\HandleExceptions::forwardsTo():257}(2, 'Undefined varia...', '/var/www/html/p...', 20)
 #2 {main}
 "} 
+[2026-01-07 16:00:48] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at /var/www/html/public/index.php:20)
+[stacktrace]
+#0 /var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->handleError(2, 'Undefined varia...', '/var/www/html/p...', 20)
+#1 /var/www/html/public/index.php(20): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->{closure:Illuminate\\Foundation\\Bootstrap\\HandleExceptions::forwardsTo():257}(2, 'Undefined varia...', '/var/www/html/p...', 20)
+#2 {main}
+"} 
+[2026-01-07 16:01:15] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at /var/www/html/public/index.php:20)
+[stacktrace]
+#0 /var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->handleError(2, 'Undefined varia...', '/var/www/html/p...', 20)
+#1 /var/www/html/public/index.php(20): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->{closure:Illuminate\\Foundation\\Bootstrap\\HandleExceptions::forwardsTo():257}(2, 'Undefined varia...', '/var/www/html/p...', 20)
+#2 {main}
+"} 
+[2026-01-07 16:01:20] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at /var/www/html/public/index.php:20)
+[stacktrace]
+#0 /var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->handleError(2, 'Undefined varia...', '/var/www/html/p...', 20)
+#1 /var/www/html/public/index.php(20): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->{closure:Illuminate\\Foundation\\Bootstrap\\HandleExceptions::forwardsTo():257}(2, 'Undefined varia...', '/var/www/html/p...', 20)
+#2 {main}
+"} 
