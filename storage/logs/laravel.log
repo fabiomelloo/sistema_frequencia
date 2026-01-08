@@ -10985,3 +10985,60 @@ CONTEXT:  unnamed portal parameter $1 = '...' at /var/www/html/vendor/laravel/fr
 #1 /var/www/html/public/index.php(20): Illuminate\\Foundation\\Bootstrap\\HandleExceptions->{closure:Illuminate\\Foundation\\Bootstrap\\HandleExceptions::forwardsTo():257}(2, 'Undefined varia...', '/var/www/html/p...', 20)
 #2 {main}
 "} 
+[2026-01-08 18:15:36] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:15:40] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:15:40] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:15:46] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:15:47] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:16:09] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:16:09] local.ERROR: Undefined variable $request_path {"exception":"[object] (ErrorException(code: 0): Undefined variable $request_path at C:/Users/User/Downloads/sistema_frequencia/public/index.php:20)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 C:/Users/User/Downloads/sistema_frequencia/public/index.php(20): Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#3 {main}
+"} 
+[2026-01-08 18:19:10] local.ERROR: http_response_code(): Cannot set response code - headers already sent (output started at C:\Users\User\Downloads\sistema_frequencia\vendor\symfony\http-foundation\Response.php:388) {"exception":"[object] (ErrorException(code: 0): http_response_code(): Cannot set response code - headers already sent (output started at C:\\Users\\User\\Downloads\\sistema_frequencia\\vendor\\symfony\\http-foundation\\Response.php:388) at C:/Users/User/Downloads/sistema_frequencia/public/index.php:27)
+[stacktrace]
+#0 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php(258): Illuminate/Foundation/Bootstrap/HandleExceptions->handleError()
+#1 [internal function]: Illuminate/Foundation/Bootstrap/HandleExceptions->{closure:Illuminate/Foundation/Bootstrap/HandleExceptions::forwardsTo():257}()
+#2 C:/Users/User/Downloads/sistema_frequencia/public/index.php(27): http_response_code()
+#3 C:/Users/User/Downloads/sistema_frequencia/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
+#4 {main}
+"} 
