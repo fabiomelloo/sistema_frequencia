@@ -36,23 +36,9 @@ class ServidorController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(\App\Http\Requests\StoreServidorRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'matricula' => ['required', 'string', 'max:50', 'unique:servidores,matricula'],
-            'nome' => ['required', 'string', 'max:255'],
-            'setor_id' => ['required', 'exists:setores,id'],
-            'origem_registro' => ['nullable', 'string', 'max:255'],
-            'ativo' => ['nullable'],
-        ]);
-
-        Servidor::create([
-            'matricula' => $validated['matricula'],
-            'nome' => $validated['nome'],
-            'setor_id' => $validated['setor_id'],
-            'origem_registro' => $validated['origem_registro'] ?? null,
-            'ativo' => $request['ativo'],
-        ]);
+        Servidor::create($request->validated());
 
         return redirect()
             ->route('admin.servidores.index')
@@ -78,23 +64,9 @@ class ServidorController extends Controller
         ]);
     }
 
-    public function update(Request $request, Servidor $servidor): RedirectResponse
+    public function update(\App\Http\Requests\UpdateServidorRequest $request, Servidor $servidor): RedirectResponse
     {
-        $validated = $request->validate([
-            'matricula' => ['required', 'string', 'max:50', 'unique:servidores,matricula,' . $servidor->id],
-            'nome' => ['required', 'string', 'max:255'],
-            'setor_id' => ['required', 'exists:setores,id'],
-            'origem_registro' => ['nullable', 'string', 'max:255'],
-            'ativo' => ['nullable'],
-        ]);
-
-        $servidor->update([
-            'matricula' => $validated['matricula'],
-            'nome' => $validated['nome'],
-            'setor_id' => $validated['setor_id'],
-            'origem_registro' => $validated['origem_registro'] ?? null,
-            'ativo' => $request['ativo'],
-        ]);
+        $servidor->update($request->validated());
 
         return redirect()
             ->route('admin.servidores.index')

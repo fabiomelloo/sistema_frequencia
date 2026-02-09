@@ -29,19 +29,9 @@ class SetorController extends Controller
         return view('admin.setores.create');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(\App\Http\Requests\StoreSetorRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'nome' => ['required', 'string', 'max:255'],
-            'sigla' => ['required', 'string', 'max:10'],
-            'ativo' => ['nullable'],
-        ]);
-
-        Setor::create([
-            'nome' => $validated['nome'],
-            'sigla' => $validated['sigla'],
-            'ativo' => $request->has('ativo'),
-        ]);
+        Setor::create($request->validated());
 
         return redirect()
             ->route('admin.setores.index')
@@ -70,19 +60,9 @@ class SetorController extends Controller
         ]);
     }
 
-    public function update(Request $request, Setor $setore): RedirectResponse
+    public function update(\App\Http\Requests\UpdateSetorRequest $request, Setor $setore): RedirectResponse
     {
-        $validated = $request->validate([
-            'nome' => ['required', 'string', 'max:255'],
-            'sigla' => ['required', 'string', 'max:10'],
-            'ativo' => ['nullable'],
-        ]);
-
-        $setore->update([
-            'nome' => $validated['nome'],
-            'sigla' => $validated['sigla'],
-            'ativo' => $request->has('ativo'),
-        ]);
+        $setore->update($request->validated());
 
         return redirect()
             ->route('admin.setores.index')

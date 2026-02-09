@@ -12,7 +12,7 @@ class RedirectIfAuthenticated
     {
         if (Auth::check()) {
             $user = Auth::user();
-            if ($user->role === 'CENTRAL') {
+            if ($user->isCentral()) {
                 return redirect()->route('painel.index');
             }
             return redirect()->route('lancamentos.index');

@@ -32,7 +32,10 @@ class Servidor extends Model
     public function lancamentosAtivos()
     {
         return $this->lancamentos()
-            ->whereNotIn('status', ['EXPORTADO', 'REJEITADO'])
+            ->whereNotIn('status', [
+                \App\Enums\LancamentoStatus::EXPORTADO->value, 
+                \App\Enums\LancamentoStatus::REJEITADO->value
+            ])
             ->orderBy('updated_at', 'desc');
     }
 }

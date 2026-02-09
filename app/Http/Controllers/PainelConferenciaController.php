@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\LancamentoSetorial;
 use App\Services\GeradorTxtFolhaService;
 use App\Http\Requests\RejeitarLancamentoRequest;
+use App\Enums\LancamentoStatus;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
@@ -14,10 +15,10 @@ class PainelConferenciaController extends Controller
 {
     public function index(): View
     {
-        $status = request('status', 'PENDENTE');
+        $status = request('status', LancamentoStatus::PENDENTE->value);
 
-        if (!in_array($status, ['PENDENTE', 'CONFERIDO', 'REJEITADO', 'EXPORTADO'])) {
-            $status = 'PENDENTE';
+        if (!in_array($status, LancamentoStatus::valores())) {
+            $status = LancamentoStatus::PENDENTE->value;
         }
 
         $lancamentos = LancamentoSetorial::where('status', $status)
@@ -26,10 +27,10 @@ class PainelConferenciaController extends Controller
             ->paginate(15);
 
         $contadores = [
-            'PENDENTE' => LancamentoSetorial::where('status', 'PENDENTE')->count(),
-            'CONFERIDO' => LancamentoSetorial::where('status', 'CONFERIDO')->count(),
-            'REJEITADO' => LancamentoSetorial::where('status', 'REJEITADO')->count(),
-            'EXPORTADO' => LancamentoSetorial::where('status', 'EXPORTADO')->count(),
+            'PENDENTE' => LancamentoSetorial::where('status', LancamentoStatus::PENDENTE)->count(),
+            'CONFERIDO' => LancamentoSetorial::where('status', LancamentoStatus::CONFERIDO)->count(),
+            'REJEITADO' => LancamentoSetorial::where('status', LancamentoStatus::REJEITADO)->count(),
+            'EXPORTADO' => LancamentoSetorial::where('status', LancamentoStatus::EXPORTADO)->count(),
         ];
 
         return view('painel.index', [
@@ -55,7 +56,7 @@ class PainelConferenciaController extends Controller
         }
 
         $lancamento->update([
-            'status' => 'CONFERIDO',
+            'status' => LancamentoStatus::CONFERIDO,
             'id_validador' => auth()->id(),
             'validated_at' => now(),
         ]);
@@ -76,7 +77,7 @@ class PainelConferenciaController extends Controller
         $validated = $request->validated();
 
         $lancamento->update([
-            'status' => 'REJEITADO',
+            'status' => LancamentoStatus::REJEITADO,
             'motivo_rejeicao' => $validated['motivo_rejeicao'],
             'id_validador' => auth()->id(),
             'validated_at' => now(),
@@ -95,7 +96,7 @@ class PainelConferenciaController extends Controller
 
             LancamentoSetorial::whereIn('id', $resultado['idsExportados'])
                 ->update([
-                    'status' => 'EXPORTADO',
+                    'status' => LancamentoStatus::EXPORTADO,
                     'exportado_em' => now(),
                 ]);
 

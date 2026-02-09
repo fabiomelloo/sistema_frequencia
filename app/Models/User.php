@@ -28,6 +28,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'role' => \App\Enums\UserRole::class,
     ];
 
     public function setor(): BelongsTo
@@ -42,11 +43,11 @@ class User extends Authenticatable
 
     public function isCentral(): bool
     {
-        return $this->role === 'CENTRAL';
+        return $this->role === \App\Enums\UserRole::CENTRAL;
     }
 
     public function isSetorial(): bool
     {
-        return $this->role === 'SETORIAL';
+        return $this->role === \App\Enums\UserRole::SETORIAL;
     }
 }

@@ -29,6 +29,7 @@ class LancamentoSetorial extends Model
     ];
 
     protected $casts = [
+        'status' => \App\Enums\LancamentoStatus::class,
         'validated_at' => 'datetime',
         'exportado_em' => 'datetime',
         'created_at' => 'datetime',
@@ -65,26 +66,26 @@ class LancamentoSetorial extends Model
 
     public function isPendente(): bool
     {
-        return $this->status === 'PENDENTE';
+        return $this->status === \App\Enums\LancamentoStatus::PENDENTE;
     }
 
     public function isConferido(): bool
     {
-        return $this->status === 'CONFERIDO';
+        return $this->status === \App\Enums\LancamentoStatus::CONFERIDO;
     }
 
     public function isRejeitado(): bool
     {
-        return $this->status === 'REJEITADO';
+        return $this->status === \App\Enums\LancamentoStatus::REJEITADO;
     }
 
     public function isExportado(): bool
     {
-        return $this->status === 'EXPORTADO';
+        return $this->status === \App\Enums\LancamentoStatus::EXPORTADO;
     }
 
     public function podeSerEditado(): bool
     {
-        return in_array($this->status, ['PENDENTE']);
+        return $this->status === \App\Enums\LancamentoStatus::PENDENTE;
     }
 }

@@ -7,6 +7,7 @@ use App\Models\EventoFolha;
 use App\Models\Servidor;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
 use App\Services\RegrasLancamentoService;
+use App\Enums\LancamentoStatus;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 use InvalidArgumentException;
@@ -60,7 +61,7 @@ class LancamentoSetorialController extends Controller
                 'adicional_turno' => $validated['adicional_turno'] ?? null,
                 'adicional_noturno' => $validated['adicional_noturno'] ?? null,
                 'observacao' => $validated['observacao'] ?? null,
-                'status' => 'PENDENTE',
+                'status' => LancamentoStatus::PENDENTE,
             ]);
 
             return redirect()
@@ -79,7 +80,7 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
         $lancamentos = LancamentoSetorial::where('setor_origem_id', $user->setor_id)
-            ->where('status', '!=', 'EXPORTADO')
+            ->where('status', '!=', LancamentoStatus::EXPORTADO->value)
             ->with(['servidor', 'evento', 'setorOrigem'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);

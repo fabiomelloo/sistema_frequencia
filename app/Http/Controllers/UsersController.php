@@ -37,23 +37,12 @@ class UsersController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(\App\Http\Requests\StoreUserRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'setor_id' => ['required', 'exists:setores,id'],
-            'role' => ['required', 'in:SETORIAL,CENTRAL'],
-        ]);
+        $validated = $request->validated();
+        $validated['password'] = bcrypt($validated['password']);
 
-        User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => bcrypt($validated['password']),
-            'setor_id' => $validated['setor_id'],
-            'role' => $validated['role'],
-        ]);
+        User::create($validated);
 
         return redirect()
             ->route('admin.users.index')
@@ -77,26 +66,18 @@ class UsersController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(\App\Http\Requests\UpdateUserRequest $request, User $user): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email,' . $user->id],
-            'setor_id' => ['required', 'exists:setores,id'],
-            'role' => ['required', 'in:SETORIAL,CENTRAL'],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-        ]);
-
-        $user->update([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'setor_id' => $validated['setor_id'],
-            'role' => $validated['role'],
-        ]);
-
-        if ($validated['password'] ?? null) {
-            $user->update(['password' => bcrypt($validated['password'])]);
+        $validated = $request->validated();
+        
+        // Remover password do array se estiver vazio
+        if (isset($validated['password'])) {
+            $validated['password'] = bcrypt($validated['password']);
+        } else {
+            unset($validated['password']);
         }
+
+        $user->update($validated);
 
         return redirect()
             ->route('users.index')

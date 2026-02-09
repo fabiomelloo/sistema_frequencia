@@ -30,96 +30,13 @@ class EventoController extends Controller
         return view('admin.eventos.create');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(\App\Http\Requests\StoreEventoRequest $request): RedirectResponse
     {
-        try {
-            $data = $request->all();
-            
-            $data['exige_dias'] = $request->has('exige_dias') ? true : false;
-            $data['exige_valor'] = $request->has('exige_valor') ? true : false;
-            $data['exige_observacao'] = $request->has('exige_observacao') ? true : false;
-            $data['exige_porcentagem'] = $request->has('exige_porcentagem') ? true : false;
-            $data['ativo'] = $request->has('ativo') ? true : false;
-            
-            $data['valor_minimo'] = $data['valor_minimo'] ?? null;
-            $data['valor_maximo'] = $data['valor_maximo'] ?? null;
-            $data['dias_maximo'] = $data['dias_maximo'] ?? null;
-            
-            if ($data['valor_minimo'] === '') {
-                $data['valor_minimo'] = null;
-            }
-            if ($data['valor_maximo'] === '') {
-                $data['valor_maximo'] = null;
-            }
-            if ($data['dias_maximo'] === '') {
-                $data['dias_maximo'] = null;
-            }
+        EventoFolha::create($request->validated());
 
-            $rules = [
-                'codigo_evento' => ['required', 'string', 'max:20', 'unique:eventos_folha,codigo_evento'],
-                'tipo_evento' => ['required', 'string', 'in:' . implode(',', \App\Enums\TipoEvento::valores())],
-                'descricao' => ['required', 'string', 'max:255'],
-                'exige_dias' => ['required', 'boolean'],
-                'exige_valor' => ['required', 'boolean'],
-                'valor_minimo' => ['nullable', 'numeric', 'min:0'],
-                'valor_maximo' => ['nullable', 'numeric', 'min:0'],
-                'exige_observacao' => ['required', 'boolean'],
-                'exige_porcentagem' => ['required', 'boolean'],
-                'ativo' => ['required', 'boolean'],
-            ];
-
-            if ($data['dias_maximo'] !== null) {
-                $rules['dias_maximo'] = ['integer', 'min:1'];
-            } else {
-                $rules['dias_maximo'] = ['nullable'];
-            }
-
-            $validated = validator($data, $rules, [
-                'codigo_evento.required' => 'O código do evento é obrigatório.',
-                'codigo_evento.unique' => 'Este código de evento já está em uso.',
-                'descricao.required' => 'A descrição é obrigatória.',
-                'valor_minimo.numeric' => 'O valor mínimo deve ser um número.',
-                'valor_maximo.numeric' => 'O valor máximo deve ser um número.',
-                'dias_maximo.integer' => 'O dias máximo deve ser um número inteiro.',
-                'dias_maximo.min' => 'O dias máximo deve ser pelo menos 1.',
-            ])->validate();
-
-            $valorMinimo = !empty($validated['valor_minimo']) ? $validated['valor_minimo'] : null;
-            $valorMaximo = !empty($validated['valor_maximo']) ? $validated['valor_maximo'] : null;
-            $diasMaximo = !empty($validated['dias_maximo']) ? $validated['dias_maximo'] : null;
-
-            if ($valorMaximo !== null && $valorMinimo !== null) {
-                if ($valorMaximo <= $valorMinimo) {
-                    return redirect()
-                        ->back()
-                        ->withInput()
-                        ->withErrors(['valor_maximo' => 'O valor máximo deve ser maior que o valor mínimo.']);
-                }
-            }
-
-            $evento = EventoFolha::create([
-                'codigo_evento' => $validated['codigo_evento'],
-                'tipo_evento' => $validated['tipo_evento'],
-                'descricao' => $validated['descricao'],
-                'exige_dias' => $validated['exige_dias'],
-                'exige_valor' => $validated['exige_valor'],
-                'valor_minimo' => $valorMinimo,
-                'valor_maximo' => $valorMaximo,
-                'dias_maximo' => $diasMaximo,
-                'exige_observacao' => $validated['exige_observacao'],
-                'exige_porcentagem' => $validated['exige_porcentagem'],
-                'ativo' => $validated['ativo'],
-            ]);
-
-            return redirect()
-                ->route('admin.eventos.index')
-                ->with('success', 'Evento criado com sucesso!');
-        } catch (\Exception $e) {
-            return redirect()
-                ->back()
-                ->withInput()
-                ->withErrors(['error' => 'Erro ao criar evento: ' . $e->getMessage()]);
-        }
+        return redirect()
+            ->route('admin.eventos.index')
+            ->with('success', 'Evento criado com sucesso!');
     }
     
     public function show(EventoFolha $evento): View
@@ -138,73 +55,9 @@ class EventoController extends Controller
         ]);
     }
 
-    public function update(Request $request, EventoFolha $evento): RedirectResponse
+    public function update(\App\Http\Requests\UpdateEventoRequest $request, EventoFolha $evento): RedirectResponse
     {
-        $data = $request->all();
-        
-        $data['exige_dias'] = $request->has('exige_dias') ? true : false;
-        $data['exige_valor'] = $request->has('exige_valor') ? true : false;
-        $data['exige_observacao'] = $request->has('exige_observacao') ? true : false;
-            $data['exige_porcentagem'] = $request->has('exige_porcentagem') ? true : false;
-            $data['ativo'] = $request->has('ativo') ? true : false;
-        
-        if (isset($data['valor_minimo']) && $data['valor_minimo'] === '') {
-            $data['valor_minimo'] = null;
-        }
-        if (isset($data['valor_maximo']) && $data['valor_maximo'] === '') {
-            $data['valor_maximo'] = null;
-        }
-        if (isset($data['dias_maximo']) && $data['dias_maximo'] === '') {
-            $data['dias_maximo'] = null;
-        }
-
-        $rules = [
-            'codigo_evento' => ['required', 'string', 'max:20', 'unique:eventos_folha,codigo_evento,' . $evento->id],
-            'tipo_evento' => ['required', 'string', 'in:' . implode(',', \App\Enums\TipoEvento::valores())],
-            'descricao' => ['required', 'string', 'max:255'],
-            'exige_dias' => ['required', 'boolean'],
-            'exige_valor' => ['required', 'boolean'],
-            'valor_minimo' => ['nullable', 'numeric', 'min:0'],
-            'valor_maximo' => ['nullable', 'numeric', 'min:0'],
-            'exige_observacao' => ['required', 'boolean'],
-            'exige_porcentagem' => ['required', 'boolean'],
-                'ativo' => ['required', 'boolean'],
-            ];
-
-        if ($data['dias_maximo'] !== null) {
-            $rules['dias_maximo'] = ['integer', 'min:1'];
-        } else {
-            $rules['dias_maximo'] = ['nullable'];
-        }
-
-        $validated = validator($data, $rules)->validate();
-
-        $valorMinimo = !empty($validated['valor_minimo']) ? $validated['valor_minimo'] : null;
-        $valorMaximo = !empty($validated['valor_maximo']) ? $validated['valor_maximo'] : null;
-        $diasMaximo = !empty($validated['dias_maximo']) ? $validated['dias_maximo'] : null;
-
-        if ($valorMaximo !== null && $valorMinimo !== null) {
-            if ($valorMaximo <= $valorMinimo) {
-                return redirect()
-                    ->back()
-                    ->withInput()
-                    ->withErrors(['valor_maximo' => 'O valor máximo deve ser maior que o valor mínimo.']);
-            }
-        }
-
-        $evento->update([
-            'codigo_evento' => $validated['codigo_evento'],
-            'tipo_evento' => $validated['tipo_evento'],
-            'descricao' => $validated['descricao'],
-            'exige_dias' => $validated['exige_dias'],
-            'exige_valor' => $validated['exige_valor'],
-            'valor_minimo' => $valorMinimo,
-            'valor_maximo' => $valorMaximo,
-            'dias_maximo' => $diasMaximo,
-            'exige_observacao' => $validated['exige_observacao'],
-            'exige_porcentagem' => $validated['exige_porcentagem'],
-            'ativo' => $validated['ativo'],
-        ]);
+        $evento->update($request->validated());
 
         return redirect()
             ->route('admin.eventos.index')
