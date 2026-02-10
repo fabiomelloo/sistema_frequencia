@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Http\Requests\UpdatePerfilRequest;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
 
 class PerfilController extends Controller
 {
@@ -20,28 +18,17 @@ class PerfilController extends Controller
         ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(UpdatePerfilRequest $request): RedirectResponse
     {
         $user = auth()->user();
-
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
-            'password' => ['nullable', 'confirmed', Password::defaults()],
-        ], [
-            'name.required' => 'O nome é obrigatório.',
-            'email.required' => 'O e-mail é obrigatório.',
-            'email.email' => 'O e-mail deve ser válido.',
-            'email.unique' => 'Este e-mail já está em uso.',
-            'password.confirmed' => 'A confirmação da senha não confere.',
-        ]);
+        $validated = $request->validated();
 
         $user->name = $validated['name'];
         $user->email = $validated['email'];
 
-        // Atualizar senha apenas se foi informada
+        // Atualizar senha apenas se foi informada (cast 'hashed' no Model faz o hash)
         if (!empty($validated['password'])) {
-            $user->password = Hash::make($validated['password']);
+            $user->password = $validated['password'];
         }
 
         $user->save();

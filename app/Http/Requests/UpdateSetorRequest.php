@@ -8,7 +8,7 @@ class UpdateSetorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return auth()->user()->isCentral();
     }
 
     protected function prepareForValidation(): void
@@ -21,9 +21,11 @@ class UpdateSetorRequest extends FormRequest
 
     public function rules(): array
     {
+        $setorId = $this->route('setor')->id;
+
         return [
             'nome' => ['required', 'string', 'max:255'],
-            'sigla' => ['required', 'string', 'max:10'],
+            'sigla' => ['required', 'string', 'max:10', 'unique:setores,sigla,' . $setorId],
             'ativo' => ['required', 'boolean'],
         ];
     }

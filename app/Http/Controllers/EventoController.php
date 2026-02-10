@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\EventoFolha;
 use App\Models\Setor;
-use Illuminate\Http\Request;
+
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 

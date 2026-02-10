@@ -8,7 +8,7 @@ class StoreSetorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return auth()->user()->isCentral();
     }
 
     protected function prepareForValidation(): void
@@ -23,7 +23,7 @@ class StoreSetorRequest extends FormRequest
     {
         return [
             'nome' => ['required', 'string', 'max:255'],
-            'sigla' => ['required', 'string', 'max:10'],
+            'sigla' => ['required', 'string', 'max:10', 'unique:setores,sigla'],
             'ativo' => ['required', 'boolean'],
         ];
     }

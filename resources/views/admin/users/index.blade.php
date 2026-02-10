@@ -49,21 +49,21 @@
                                 <td>{{ $user->email }}</td>
                                 <td>{{ $user->setor->nome ?? 'N/A' }}</td>
                                 <td>
-                                    @if ($user->role === 'CENTRAL')
+                                    @if ($user->isCentral())
                                         <span class="badge bg-danger">Central</span>
                                     @else
                                         <span class="badge bg-info">Setorial</span>
                                     @endif
                                 </td>
                                 <td>
-                                    <a href="{{ route('admin.users.edit', $user) }}" class="btn btn-sm btn-warning">
-                                        <i class="bi bi-pencil"></i> Editar
+                                    <a href="{{ route('admin.users.edit', $user) }}" class="btn btn-sm btn-warning" aria-label="Editar usuário">
+                                        <i class="bi bi-pencil" aria-hidden="true"></i> Editar
                                     </a>
                                     <form action="{{ route('admin.users.destroy', $user) }}" method="POST" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja deletar este usuário?')">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-danger">
-                                            <i class="bi bi-trash"></i> Deletar
+                                        <button type="submit" class="btn btn-sm btn-danger" aria-label="Deletar usuário">
+                                            <i class="bi bi-trash" aria-hidden="true"></i> Deletar
                                         </button>
                                     </form>
                                 </td>

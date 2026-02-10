@@ -76,7 +76,7 @@
                             <input type="text" 
                                    class="form-control" 
                                    id="role" 
-                                   value="{{ $user->role === 'CENTRAL' ? 'Central' : 'Setorial' }}" 
+                                   value="{{ $user->role->label() }}" 
                                    disabled>
                             <small class="form-text text-muted">O perfil não pode ser alterado.</small>
                         </div>

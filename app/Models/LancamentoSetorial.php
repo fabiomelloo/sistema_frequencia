@@ -21,11 +21,8 @@ class LancamentoSetorial extends Model
         'adicional_turno',
         'adicional_noturno',
         'observacao',
-        'status',
-        'motivo_rejeicao',
-        'id_validador',
-        'validated_at',
-        'exportado_em'
+        // Campos de workflow — NÃO incluir no $fillable (prevenir mass assignment)
+        // 'status', 'motivo_rejeicao', 'id_validador', 'validated_at', 'exportado_em'
     ];
 
     protected $casts = [

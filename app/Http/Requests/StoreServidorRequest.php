@@ -8,7 +8,7 @@ class StoreServidorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return auth()->user()->isCentral();
     }
 
     protected function prepareForValidation(): void

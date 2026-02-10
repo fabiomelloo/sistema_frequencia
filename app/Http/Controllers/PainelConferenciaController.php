@@ -55,11 +55,10 @@ class PainelConferenciaController extends Controller
                 ->withErrors(['error' => 'Apenas lançamentos com status PENDENTE podem ser aprovados.']);
         }
 
-        $lancamento->update([
-            'status' => LancamentoStatus::CONFERIDO,
-            'id_validador' => auth()->id(),
-            'validated_at' => now(),
-        ]);
+        $lancamento->status = LancamentoStatus::CONFERIDO;
+        $lancamento->id_validador = auth()->id();
+        $lancamento->validated_at = now();
+        $lancamento->save();
 
         return redirect()
             ->back()
@@ -76,12 +75,11 @@ class PainelConferenciaController extends Controller
 
         $validated = $request->validated();
 
-        $lancamento->update([
-            'status' => LancamentoStatus::REJEITADO,
-            'motivo_rejeicao' => $validated['motivo_rejeicao'],
-            'id_validador' => auth()->id(),
-            'validated_at' => now(),
-        ]);
+        $lancamento->status = LancamentoStatus::REJEITADO;
+        $lancamento->motivo_rejeicao = $validated['motivo_rejeicao'];
+        $lancamento->id_validador = auth()->id();
+        $lancamento->validated_at = now();
+        $lancamento->save();
 
         return redirect()
             ->back()
@@ -95,10 +93,11 @@ class PainelConferenciaController extends Controller
             $resultado = $servico->gerar();
 
             LancamentoSetorial::whereIn('id', $resultado['idsExportados'])
-                ->update([
-                    'status' => LancamentoStatus::EXPORTADO,
-                    'exportado_em' => now(),
-                ]);
+                ->each(function ($lancamento) {
+                    $lancamento->status = LancamentoStatus::EXPORTADO;
+                    $lancamento->exportado_em = now();
+                    $lancamento->save();
+                });
 
             return response()
                 ->download(storage_path("app/{$resultado['nomeArquivo']}"))
@@ -113,7 +112,7 @@ class PainelConferenciaController extends Controller
 
             return redirect()
                 ->route('painel.index')
-                ->withErrors(['error' => 'Erro ao exportar lançamentos: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Erro ao exportar lançamentos. Contate o administrador.']);
         }
     }
 }

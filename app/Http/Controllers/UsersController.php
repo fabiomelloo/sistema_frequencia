@@ -4,17 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Setor;
-use Illuminate\Http\Request;
+use App\Services\UserService;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 
 class UsersController extends Controller
 {
+    protected UserService $userService;
+
     // Apenas CENTRAL pode gerenciar usuários
-    public function __construct()
+    public function __construct(UserService $userService)
     {
         $this->middleware('auth');
         $this->middleware('role:CENTRAL');
+        $this->userService = $userService;
     }
 
     public function index(): View
@@ -23,7 +26,7 @@ class UsersController extends Controller
             ->orderBy('name')
             ->paginate(20);
 
-        return view('users.index', [
+        return view('admin.users.index', [
             'users' => $users,
         ]);
     }
@@ -32,17 +35,14 @@ class UsersController extends Controller
     {
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
 
-        return view('users.create', [
+        return view('admin.users.create', [
             'setores' => $setores,
         ]);
     }
 
     public function store(\App\Http\Requests\StoreUserRequest $request): RedirectResponse
     {
-        $validated = $request->validated();
-        $validated['password'] = bcrypt($validated['password']);
-
-        User::create($validated);
+        $this->userService->create($request->validated());
 
         return redirect()
             ->route('admin.users.index')
@@ -51,7 +51,7 @@ class UsersController extends Controller
 
     public function show(User $user): View
     {
-        return view('users.show', [
+        return view('admin.users.show', [
             'user' => $user,
         ]);
     }
@@ -60,7 +60,7 @@ class UsersController extends Controller
     {
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
 
-        return view('users.edit', [
+        return view('admin.users.edit', [
             'user' => $user,
             'setores' => $setores,
         ]);
@@ -68,19 +68,10 @@ class UsersController extends Controller
 
     public function update(\App\Http\Requests\UpdateUserRequest $request, User $user): RedirectResponse
     {
-        $validated = $request->validated();
-        
-        // Remover password do array se estiver vazio
-        if (isset($validated['password'])) {
-            $validated['password'] = bcrypt($validated['password']);
-        } else {
-            unset($validated['password']);
-        }
-
-        $user->update($validated);
+        $this->userService->update($user, $request->validated());
 
         return redirect()
-            ->route('users.index')
+            ->route('admin.users.index')
             ->with('success', 'Usuário atualizado com sucesso!');
     }
 
@@ -89,7 +80,7 @@ class UsersController extends Controller
         $user->delete();
 
         return redirect()
-            ->route('users.index')
+            ->route('admin.users.index')
             ->with('success', 'Usuário deletado com sucesso!');
     }
 }

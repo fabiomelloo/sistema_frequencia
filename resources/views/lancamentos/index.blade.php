@@ -50,18 +50,18 @@
                             </td>
                             <td>{{ $lancamento->created_at->format('d/m/Y H:i') }}</td>
                             <td>
-                                <a href="{{ route('lancamentos.show', $lancamento) }}" class="btn btn-sm btn-info" title="Visualizar">
-                                    <i class="bi bi-eye"></i>
+                                <a href="{{ route('lancamentos.show', $lancamento) }}" class="btn btn-sm btn-info" title="Visualizar" aria-label="Visualizar lançamento">
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
                                 </a>
                                 @if ($lancamento->podeSerEditado())
-                                    <a href="{{ route('lancamentos.edit', $lancamento) }}" class="btn btn-sm btn-warning" title="Editar">
-                                        <i class="bi bi-pencil"></i>
+                                    <a href="{{ route('lancamentos.edit', $lancamento) }}" class="btn btn-sm btn-warning" title="Editar" aria-label="Editar lançamento">
+                                        <i class="bi bi-pencil" aria-hidden="true"></i>
                                     </a>
                                     <form action="{{ route('lancamentos.destroy', $lancamento) }}" method="POST" style="display: inline;">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-danger" title="Deletar" onclick="return confirm('Tem certeza?')">
-                                            <i class="bi bi-trash"></i>
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Deletar" onclick="return confirm('Tem certeza?')" aria-label="Deletar lançamento">
+                                            <i class="bi bi-trash" aria-hidden="true"></i>
                                         </button>
                                     </form>
                                 @endif

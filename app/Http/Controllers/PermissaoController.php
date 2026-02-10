@@ -10,11 +10,7 @@ use Illuminate\Http\RedirectResponse;
 
 class PermissaoController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth');
-        $this->middleware('role:CENTRAL');
-    }
+    // Middleware 'auth' e 'role:CENTRAL' já aplicados pelo route group em web.php
 
     public function index(): View
     {

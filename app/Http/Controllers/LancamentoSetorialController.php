@@ -6,6 +6,7 @@ use App\Models\LancamentoSetorial;
 use App\Models\EventoFolha;
 use App\Models\Servidor;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
+use App\Http\Requests\UpdateLancamentoSetorialRequest;
 use App\Services\RegrasLancamentoService;
 use App\Enums\LancamentoStatus;
 use Illuminate\View\View;
@@ -48,7 +49,7 @@ class LancamentoSetorialController extends Controller
 
             $regrasService->validar($servidor, $evento, $validated);
 
-            LancamentoSetorial::create([
+            $lancamento = LancamentoSetorial::create([
                 'servidor_id' => $validated['servidor_id'],
                 'evento_id' => $validated['evento_id'],
                 'setor_origem_id' => $user->setor_id,
@@ -61,8 +62,11 @@ class LancamentoSetorialController extends Controller
                 'adicional_turno' => $validated['adicional_turno'] ?? null,
                 'adicional_noturno' => $validated['adicional_noturno'] ?? null,
                 'observacao' => $validated['observacao'] ?? null,
-                'status' => LancamentoStatus::PENDENTE,
             ]);
+
+            // Status é campo de workflow — setar explicitamente (fora do $fillable)
+            $lancamento->status = LancamentoStatus::PENDENTE;
+            $lancamento->save();
 
             return redirect()
                 ->route('lancamentos.index')
@@ -133,7 +137,7 @@ class LancamentoSetorialController extends Controller
     }
 
     public function update(
-        StoreLancamentoSetorialRequest $request,
+        UpdateLancamentoSetorialRequest $request,
         LancamentoSetorial $lancamento,
         RegrasLancamentoService $regrasService
     ): RedirectResponse {

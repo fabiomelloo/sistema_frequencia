@@ -13,7 +13,7 @@ use App\Http\Controllers\PerfilController;
 
 // Rotas públicas
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
 
 // Rota home - redireciona baseado no role
@@ -46,7 +46,6 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('painel')->name('painel.')->group(function () {
             Route::get('/', [PainelConferenciaController::class, 'index'])->name('index');
             Route::post('/exportar', [PainelConferenciaController::class, 'exportar'])->name('exportar');
-            Route::get('/exportar', [PainelConferenciaController::class, 'exportar'])->name('exportar.get');
             Route::get('/{lancamento}', [PainelConferenciaController::class, 'show'])
                 ->whereNumber('lancamento')
                 ->name('show');
@@ -61,13 +60,13 @@ Route::middleware(['auth'])->group(function () {
         // ===== PAINEL ADMINISTRATIVO =====
         Route::prefix('admin')->name('admin.')->group(function () {
             Route::resource('users', UsersController::class);
-            Route::resource('setores', SetorController::class);
-            Route::resource('servidores', ServidorController::class);
+            Route::resource('setores', SetorController::class)->parameters(['setores' => 'setor']);
+            Route::resource('servidores', ServidorController::class)->except('destroy');
             Route::resource('eventos', EventoController::class);
             Route::get('permissoes', [PermissaoController::class, 'index'])->name('permissoes.index');
             Route::post('permissoes', [PermissaoController::class, 'store'])->name('permissoes.store');
             Route::delete('permissoes/{setor}/{evento}', [PermissaoController::class, 'destroy'])->name('permissoes.destroy');
-            Route::post('permissoes/{setor}/{evento}/toggle', [PermissaoController::class, 'toggle'])->name('permissoes.toggle');
+            Route::patch('permissoes/{setor}/{evento}/toggle', [PermissaoController::class, 'toggle'])->name('permissoes.toggle');
             Route::delete('servidores/{servidor}/desativar', [ServidorController::class, 'destroy'])->name('servidores.destroy');
             Route::post('servidores/{servidor}/ativar', [ServidorController::class, 'ativar'])->name('servidores.ativar');
         });

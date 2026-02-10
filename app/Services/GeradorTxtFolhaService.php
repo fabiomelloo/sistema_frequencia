@@ -133,7 +133,7 @@ class GeradorTxtFolhaService
 
     private function gerarNomeArquivo(): string
     {
-        return 'LOTE_' . now()->format('Ym') . '.txt';
+        return 'LOTE_' . now()->format('Ymd_His') . '.txt';
     }
 
     private function salvarArquivo(string $nomeArquivo, string $conteudo): void
