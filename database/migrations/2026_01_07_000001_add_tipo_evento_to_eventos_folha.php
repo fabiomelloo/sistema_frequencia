@@ -9,10 +9,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('eventos_folha', function (Blueprint $table) {
-            $table->string('tipo_evento', 30)->nullable()->after('codigo_evento')
-                ->comment('Tipo do evento para regras de negócio (desacopla de codigo_evento)');
-        });
+        if (!Schema::hasColumn('eventos_folha', 'tipo_evento')) {
+            Schema::table('eventos_folha', function (Blueprint $table) {
+                $table->string('tipo_evento', 30)->nullable()->after('codigo_evento')
+                    ->comment('Tipo do evento para regras de negócio (desacopla de codigo_evento)');
+            });
+        }
 
         // Atualizar eventos existentes baseado no código (migração de dados)
         // Isso é uma estimativa - ajuste conforme seus dados reais
@@ -33,7 +35,10 @@ return new class extends Migration
         DB::statement($sql);
 
         // Tornar obrigatório após migração
-        DB::statement('ALTER TABLE eventos_folha ALTER COLUMN tipo_evento SET NOT NULL');
+        // Tornar obrigatório após migração (com suporte multi-banco)
+        Schema::table('eventos_folha', function (Blueprint $table) {
+            $table->string('tipo_evento', 30)->nullable(false)->change();
+        });
 
         // Adicionar índice para performance
         Schema::table('eventos_folha', function (Blueprint $table) {
