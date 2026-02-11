@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use App\Services\AuditService;
 
 class AuthController extends Controller
 {
@@ -18,19 +19,15 @@ class AuthController extends Controller
     {
         $credentials = $request->validate([
             'email' => ['required', 'email'],
-            'password' => ['required'],
+            'password' => ['required', 'min:6'],
         ]);
 
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
 
-            // Redirecionar baseado no role
-            $user = Auth::user();
-            if ($user->isCentral()) {
-                return redirect()->route('painel.index');
-            } else {
-                return redirect()->route('lancamentos.index');
-            }
+            AuditService::login('Login realizado com sucesso');
+
+            return redirect()->route('dashboard');
         }
 
         return back()->withErrors([
@@ -40,6 +37,8 @@ class AuthController extends Controller
 
     public function logout(Request $request): RedirectResponse
     {
+        AuditService::logout('Logout realizado');
+
         Auth::logout();
 
         $request->session()->invalidate();
@@ -50,12 +49,6 @@ class AuthController extends Controller
 
     public function home(): RedirectResponse
     {
-        $user = Auth::user();
-
-        if ($user->isCentral()) {
-            return redirect()->route('painel.index');
-        }
-
-        return redirect()->route('lancamentos.index');
+        return redirect()->route('dashboard');
     }
 }

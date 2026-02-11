@@ -5,16 +5,68 @@ namespace App\Http\Controllers;
 use App\Models\LancamentoSetorial;
 use App\Models\EventoFolha;
 use App\Models\Servidor;
+use App\Models\Setor;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
 use App\Http\Requests\UpdateLancamentoSetorialRequest;
 use App\Services\RegrasLancamentoService;
+use App\Services\AuditService;
 use App\Enums\LancamentoStatus;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 use InvalidArgumentException;
 
 class LancamentoSetorialController extends Controller
 {
+    public function index(Request $request): View
+    {
+        $user = auth()->user();
+        $query = LancamentoSetorial::where('setor_origem_id', $user->setor_id)
+            ->with(['servidor', 'evento', 'setorOrigem']);
+
+        // Filtros
+        if ($request->filled('competencia')) {
+            $query->where('competencia', $request->competencia);
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        } else {
+            // Por padrão, não mostra exportados
+            $query->where('status', '!=', LancamentoStatus::EXPORTADO->value);
+        }
+        if ($request->filled('servidor_id')) {
+            $query->where('servidor_id', $request->servidor_id);
+        }
+        if ($request->filled('evento_id')) {
+            $query->where('evento_id', $request->evento_id);
+        }
+        if ($request->filled('busca')) {
+            $busca = $request->busca;
+            $query->whereHas('servidor', function ($q) use ($busca) {
+                $q->where('nome', 'like', "%{$busca}%")
+                  ->orWhere('matricula', 'like', "%{$busca}%");
+            });
+        }
+
+        $lancamentos = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
+
+        // Dados para filtros
+        $servidores = Servidor::where('setor_id', $user->setor_id)
+            ->where('ativo', true)->orderBy('nome')->get();
+        $eventos = $user->setor->eventosPermitidos()
+            ->where('eventos_folha.ativo', true)->orderBy('eventos_folha.descricao')->get();
+        $competencias = LancamentoSetorial::where('setor_origem_id', $user->setor_id)
+            ->select('competencia')->distinct()->orderBy('competencia', 'desc')->pluck('competencia');
+
+        return view('lancamentos.index', [
+            'lancamentos' => $lancamentos,
+            'servidores' => $servidores,
+            'eventos' => $eventos,
+            'competencias' => $competencias,
+            'filtros' => $request->only(['competencia', 'status', 'servidor_id', 'evento_id', 'busca']),
+        ]);
+    }
+
     public function create(): View
     {
         $user = auth()->user();
@@ -30,9 +82,13 @@ class LancamentoSetorialController extends Controller
             ->orderBy('eventos_folha.descricao')
             ->get();
 
+        // Competência padrão: mês atual
+        $competenciaAtual = now()->format('Y-m');
+
         return view('lancamentos.create', [
             'servidores' => $servidores,
             'eventos' => $eventos,
+            'competenciaAtual' => $competenciaAtual,
         ]);
     }
 
@@ -46,6 +102,15 @@ class LancamentoSetorialController extends Controller
 
             $servidor = Servidor::findOrFail($validated['servidor_id']);
             $evento = EventoFolha::findOrFail($validated['evento_id']);
+            $competencia = $validated['competencia'];
+
+            // Validar duplicata
+            if (LancamentoSetorial::existeDuplicata($servidor->id, $evento->id, $competencia)) {
+                return redirect()
+                    ->back()
+                    ->withInput()
+                    ->withErrors(['error' => "Já existe um lançamento para este servidor com este evento na competência {$competencia}."]);
+            }
 
             $regrasService->validar($servidor, $evento, $validated);
 
@@ -53,6 +118,7 @@ class LancamentoSetorialController extends Controller
                 'servidor_id' => $validated['servidor_id'],
                 'evento_id' => $validated['evento_id'],
                 'setor_origem_id' => $user->setor_id,
+                'competencia' => $competencia,
                 'dias_trabalhados' => $validated['dias_trabalhados'] ?? null,
                 'dias_noturnos' => $validated['dias_noturnos'] ?? null,
                 'valor' => $validated['valor'] ?? null,
@@ -64,9 +130,13 @@ class LancamentoSetorialController extends Controller
                 'observacao' => $validated['observacao'] ?? null,
             ]);
 
-            // Status é campo de workflow — setar explicitamente (fora do $fillable)
             $lancamento->status = LancamentoStatus::PENDENTE;
             $lancamento->save();
+
+            AuditService::criou('LancamentoSetorial', $lancamento->id,
+                "Lançamento criado: {$servidor->nome} - {$evento->descricao} ({$competencia})",
+                $lancamento->toArray()
+            );
 
             return redirect()
                 ->route('lancamentos.index')
@@ -78,21 +148,6 @@ class LancamentoSetorialController extends Controller
                 ->withInput()
                 ->withErrors(['error' => $e->getMessage()]);
         }
-    }
-
-    public function index(): View
-    {
-        $user = auth()->user();
-        $lancamentos = LancamentoSetorial::where('setor_origem_id', $user->setor_id)
-            ->where('status', '!=', LancamentoStatus::EXPORTADO->value)
-            ->with(['servidor', 'evento', 'setorOrigem'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(15);
-            
-
-        return view('lancamentos.index', [
-            'lancamentos' => $lancamentos,
-        ]);
     }
 
     public function show(LancamentoSetorial $lancamento): View
@@ -149,15 +204,26 @@ class LancamentoSetorialController extends Controller
             }
 
             $validated = $request->validated();
+            $dadosAntes = $lancamento->toArray();
 
             $servidor = Servidor::findOrFail($validated['servidor_id']);
             $evento = EventoFolha::findOrFail($validated['evento_id']);
+            $competencia = $validated['competencia'] ?? $lancamento->competencia;
+
+            // Validar duplicata (ignorando o lançamento atual)
+            if (LancamentoSetorial::existeDuplicata($servidor->id, $evento->id, $competencia, $lancamento->id)) {
+                return redirect()
+                    ->back()
+                    ->withInput()
+                    ->withErrors(['error' => "Já existe um lançamento para este servidor com este evento na competência {$competencia}."]);
+            }
 
             $regrasService->validar($servidor, $evento, $validated);
 
             $lancamento->update([
                 'servidor_id' => $validated['servidor_id'],
                 'evento_id' => $validated['evento_id'],
+                'competencia' => $competencia,
                 'dias_trabalhados' => $validated['dias_trabalhados'] ?? null,
                 'dias_noturnos' => $validated['dias_noturnos'] ?? null,
                 'valor' => $validated['valor'] ?? null,
@@ -168,6 +234,20 @@ class LancamentoSetorialController extends Controller
                 'adicional_noturno' => $validated['adicional_noturno'] ?? null,
                 'observacao' => $validated['observacao'] ?? null,
             ]);
+
+            // Se era rejeitado e foi editado, volta para pendente (retrabalho)
+            if ($lancamento->isRejeitado()) {
+                $lancamento->status = LancamentoStatus::PENDENTE;
+                $lancamento->motivo_rejeicao = null;
+                $lancamento->id_validador = null;
+                $lancamento->validated_at = null;
+                $lancamento->save();
+            }
+
+            AuditService::editou('LancamentoSetorial', $lancamento->id,
+                "Lançamento editado: {$servidor->nome} - {$evento->descricao}",
+                $dadosAntes, $lancamento->fresh()->toArray()
+            );
 
             return redirect()
                 ->route('lancamentos.index')
@@ -189,7 +269,13 @@ class LancamentoSetorialController extends Controller
             abort(403, 'Não autorizado.');
         }
 
+        $dadosAntes = $lancamento->toArray();
         $lancamento->delete();
+
+        AuditService::excluiu('LancamentoSetorial', $lancamento->id,
+            "Lançamento excluído: servidor_id={$lancamento->servidor_id}, evento_id={$lancamento->evento_id}",
+            $dadosAntes
+        );
 
         return redirect()
             ->route('lancamentos.index')

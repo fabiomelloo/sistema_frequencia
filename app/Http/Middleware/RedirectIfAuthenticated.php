@@ -11,11 +11,7 @@ class RedirectIfAuthenticated
     public function handle(Request $request, Closure $next): mixed
     {
         if (Auth::check()) {
-            $user = Auth::user();
-            if ($user->isCentral()) {
-                return redirect()->route('painel.index');
-            }
-            return redirect()->route('lancamentos.index');
+            return redirect()->route('dashboard');
         }
 
         return $next($request);

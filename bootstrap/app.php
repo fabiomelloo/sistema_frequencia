@@ -3,7 +3,6 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-// use Throwable; // não necessário — usar \Throwable no tipo
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,6 +17,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         
         $middleware->redirectGuestsTo(fn () => route('login'));
+
+        // Middleware global: security headers + notificações compartilhadas
+        $middleware->web(append: [
+            \App\Http\Middleware\SecurityHeaders::class,
+            \App\Http\Middleware\ShareNotificacoes::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(function ($request, \Throwable $e) {

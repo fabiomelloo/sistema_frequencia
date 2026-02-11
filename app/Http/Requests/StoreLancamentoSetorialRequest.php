@@ -20,6 +20,11 @@ class StoreLancamentoSetorialRequest extends FormRequest
         $evento = $this->getEvento(); // Cache da query
 
         $rules = [
+            'competencia' => [
+                'required',
+                'string',
+                'regex:/^\d{4}-\d{2}$/',
+            ],
             'servidor_id' => [
                 'required',
                 'exists:servidores,id',

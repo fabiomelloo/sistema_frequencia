@@ -1,67 +1,130 @@
 @extends('layouts.app')
 
+@section('title', 'Painel de Conferência — Sistema de Frequência')
+@section('description', 'Conferência e aprovação de lançamentos setoriais')
+
 @section('content')
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <h2>Painel de Conferência de Lançamentos</h2>
-        </div>
-        <div class="col-md-4 text-end">
-            @if ($statusAtual === 'CONFERIDO')
-                <form action="{{ route('painel.exportar') }}" method="POST" style="display: inline;">
-                    @csrf
-                    <button type="submit" class="btn btn-success" onclick="return confirm('Exportar todos os lançamentos CONFERIDO?')">
-                        Exportar TXT
-                    </button>
-                </form>
-            @endif
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-clipboard-check me-2"></i>Painel de Conferência</h4>
+    <div class="d-flex gap-2">
+        @if ($statusAtual === 'CONFERIDO')
+            <form action="{{ route('painel.exportar') }}" method="POST" style="display: inline;">
+                @csrf
+                <input type="hidden" name="competencia" value="{{ $filtros['competencia'] ?? '' }}">
+                <button type="submit" class="btn btn-success" onclick="return confirm('Exportar todos os lançamentos CONFERIDO?')">
+                    <i class="bi bi-download me-1"></i> Exportar TXT
+                </button>
+            </form>
+        @endif
+    </div>
+</div>
+
+@if (session('success'))
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-1"></i>{{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+@endif
+
+@if ($errors->any())
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong><i class="bi bi-exclamation-triangle me-1"></i></strong>{{ $errors->first() }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+@endif
+
+{{-- Status tabs --}}
+<div class="card filter-card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted fw-semibold me-2" style="font-size:0.85rem">Status:</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'PENDENTE'])) }}" class="btn btn-sm {{ $statusAtual === 'PENDENTE' ? 'btn-warning' : 'btn-outline-warning' }}">
+                <i class="bi bi-hourglass-split me-1"></i>Pendentes <span class="badge bg-dark ms-1">{{ $contadores['PENDENTE'] }}</span>
+            </a>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO'])) }}" class="btn btn-sm {{ $statusAtual === 'CONFERIDO' ? 'btn-success' : 'btn-outline-success' }}">
+                <i class="bi bi-check-circle me-1"></i>Conferidos <span class="badge bg-dark ms-1">{{ $contadores['CONFERIDO'] }}</span>
+            </a>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'REJEITADO'])) }}" class="btn btn-sm {{ $statusAtual === 'REJEITADO' ? 'btn-danger' : 'btn-outline-danger' }}">
+                <i class="bi bi-x-circle me-1"></i>Rejeitados <span class="badge bg-dark ms-1">{{ $contadores['REJEITADO'] }}</span>
+            </a>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'EXPORTADO'])) }}" class="btn btn-sm {{ $statusAtual === 'EXPORTADO' ? 'btn-secondary' : 'btn-outline-secondary' }}">
+                <i class="bi bi-download me-1"></i>Exportados <span class="badge bg-dark ms-1">{{ $contadores['EXPORTADO'] }}</span>
+            </a>
         </div>
     </div>
+</div>
 
-    @if (session('success'))
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            {{ session('success') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    @endif
-
-    @if ($errors->any())
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <strong>Erro:</strong>
-            {{ $errors->first() }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    @endif
-
-    <div class="card mb-4">
-        <div class="card-body">
-            <h5 class="card-title">Filtrar por Status</h5>
-            <div class="btn-group" role="group">
-                <a href="{{ route('painel.index', ['status' => 'PENDENTE']) }}" class="btn {{ $statusAtual === 'PENDENTE' ? 'btn-danger active' : 'btn-outline-danger' }}">
-                    PENDENTE <span class="badge bg-danger ms-2">{{ $contadores['PENDENTE'] }}</span>
-                </a>
-                <a href="{{ route('painel.index', ['status' => 'CONFERIDO']) }}" class="btn {{ $statusAtual === 'CONFERIDO' ? 'btn-success active' : 'btn-outline-success' }}">
-                    CONFERIDO <span class="badge bg-success ms-2">{{ $contadores['CONFERIDO'] }}</span>
-                </a>
-                <a href="{{ route('painel.index', ['status' => 'REJEITADO']) }}" class="btn {{ $statusAtual === 'REJEITADO' ? 'btn-warning active' : 'btn-outline-warning' }}">
-                    REJEITADO <span class="badge bg-warning ms-2">{{ $contadores['REJEITADO'] }}</span>
-                </a>
-                <a href="{{ route('painel.index', ['status' => 'EXPORTADO']) }}" class="btn {{ $statusAtual === 'EXPORTADO' ? 'btn-secondary active' : 'btn-outline-secondary' }}">
-                    EXPORTADO <span class="badge bg-secondary ms-2">{{ $contadores['EXPORTADO'] }}</span>
-                </a>
+{{-- Filtros --}}
+<div class="card filter-card mb-3">
+    <div class="card-body">
+        <form method="GET" action="{{ route('painel.index') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="status" value="{{ $statusAtual }}">
+            <div class="col-md-2">
+                <label class="form-label fw-semibold" style="font-size:0.8rem">Competência</label>
+                <select name="competencia" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    @foreach ($competencias as $comp)
+                        <option value="{{ $comp }}" @selected(($filtros['competencia'] ?? '') == $comp)>{{ $comp }}</option>
+                    @endforeach
+                </select>
             </div>
-        </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold" style="font-size:0.8rem">Setor</label>
+                <select name="setor_id" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    @foreach ($setores as $s)
+                        <option value="{{ $s->id }}" @selected(($filtros['setor_id'] ?? '') == $s->id)>{{ $s->sigla ?? $s->nome }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold" style="font-size:0.8rem">Evento</label>
+                <select name="evento_id" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    @foreach ($eventos as $e)
+                        <option value="{{ $e->id }}" @selected(($filtros['evento_id'] ?? '') == $e->id)>{{ $e->descricao }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold" style="font-size:0.8rem">Busca</label>
+                <input type="text" name="busca" class="form-control form-control-sm" placeholder="Matrícula / nome" value="{{ $filtros['busca'] ?? '' }}">
+            </div>
+            <div class="col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-search"></i> Filtrar</button>
+                <a href="{{ route('painel.index', ['status' => $statusAtual]) }}" class="btn btn-outline-secondary btn-sm" title="Limpar"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
     </div>
+</div>
 
+{{-- Tabela com seleção para aprovação em lote --}}
+<form action="{{ route('painel.aprovar-lote') }}" method="POST" id="formLote">
+    @csrf
     <div class="card">
+        @if ($statusAtual === 'PENDENTE' && $lancamentos->count() > 0)
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAll">
+                    <label class="form-check-label fw-semibold" for="selectAll" style="font-size:0.85rem">Selecionar todos</label>
+                </div>
+                <button type="submit" class="btn btn-success btn-sm" id="btnAprovarLote" style="display:none" onclick="return confirm('Aprovar os lançamentos selecionados?')">
+                    <i class="bi bi-check-all me-1"></i> Aprovar Selecionados (<span id="countSelecionados">0</span>)
+                </button>
+            </div>
+        @endif
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
+                        @if ($statusAtual === 'PENDENTE')
+                            <th style="width:40px"></th>
+                        @endif
                         <th>Matrícula</th>
                         <th>Servidor</th>
                         <th>Evento</th>
                         <th>Setor</th>
+                        <th>Competência</th>
                         <th>Valor</th>
                         <th>Data Lançamento</th>
                         <th>Ações</th>
@@ -69,54 +132,66 @@
                 </thead>
                 <tbody>
                     @forelse ($lancamentos as $lancamento)
-                        <tr @if ($lancamento->isPendente()) class="table-danger" @elseif ($lancamento->isConferido()) class="table-success" @elseif ($lancamento->isExportado()) class="table-secondary" @endif>
-                            <td>
-                                <strong>{{ $lancamento->servidor->matricula }}</strong>
-                            </td>
+                        <tr @class([
+                            'table-warning' => $lancamento->isPendente(),
+                            'table-success' => $lancamento->isConferido(),
+                            'table-danger' => $lancamento->isRejeitado(),
+                        ])>
+                            @if ($statusAtual === 'PENDENTE')
+                                <td>
+                                    <input class="form-check-input item-check" type="checkbox" name="lancamento_ids[]" value="{{ $lancamento->id }}">
+                                </td>
+                            @endif
+                            <td><strong>{{ $lancamento->servidor->matricula }}</strong></td>
                             <td>{{ $lancamento->servidor->nome }}</td>
                             <td>{{ $lancamento->evento->descricao }}</td>
                             <td>{{ $lancamento->setorOrigem->sigla ?? $lancamento->setorOrigem->nome }}</td>
+                            <td>{{ $lancamento->competencia }}</td>
                             <td>
                                 @if ($lancamento->valor)
                                     R$ {{ number_format($lancamento->valor, 2, ',', '.') }}
                                 @else
-                                    ---
+                                    <span class="text-muted">---</span>
                                 @endif
                             </td>
                             <td>{{ $lancamento->created_at->format('d/m/Y H:i') }}</td>
                             <td>
-                                <a href="{{ route('painel.show', $lancamento) }}" class="btn btn-sm btn-info" title="Visualizar">
+                                <a href="{{ route('painel.show', $lancamento) }}" class="btn btn-sm btn-outline-info" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 @if ($lancamento->isPendente())
                                     <form action="{{ route('painel.aprovar', $lancamento) }}" method="POST" style="display: inline;">
                                         @csrf
-                                        <button type="submit" class="btn btn-sm btn-success" title="Aprovar">
+                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Aprovar">
                                             <i class="bi bi-check-circle"></i>
                                         </button>
                                     </form>
-                                    <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejeicaoModal{{ $lancamento->id }}" title="Rejeitar">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejeicaoModal{{ $lancamento->id }}" title="Rejeitar">
                                         <i class="bi bi-x-circle"></i>
                                     </button>
 
+                                    {{-- Modal de Rejeição --}}
                                     <div class="modal fade" id="rejeicaoModal{{ $lancamento->id }}" tabindex="-1">
                                         <div class="modal-dialog">
                                             <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Rejeitar Lançamento</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                <div class="modal-header bg-danger text-white">
+                                                    <h5 class="modal-title"><i class="bi bi-x-circle me-1"></i>Rejeitar Lançamento</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <form action="{{ route('painel.rejeitar', $lancamento) }}" method="POST">
                                                     @csrf
                                                     <div class="modal-body">
+                                                        <p class="text-muted mb-2">
+                                                            <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
+                                                        </p>
                                                         <div class="mb-3">
-                                                            <label for="motivo" class="form-label">Motivo da Rejeição <span class="text-danger">*</span></label>
-                                                            <textarea name="motivo_rejeicao" id="motivo" class="form-control" rows="4" required></textarea>
+                                                            <label for="motivo{{ $lancamento->id }}" class="form-label fw-semibold">Motivo da Rejeição <span class="text-danger">*</span></label>
+                                                            <textarea name="motivo_rejeicao" id="motivo{{ $lancamento->id }}" class="form-control" rows="4" required placeholder="Descreva o motivo da rejeição..."></textarea>
                                                         </div>
                                                     </div>
                                                     <div class="modal-footer">
                                                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                        <button type="submit" class="btn btn-danger">Rejeitar</button>
+                                                        <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle me-1"></i>Rejeitar</button>
                                                     </div>
                                                 </form>
                                             </div>
@@ -127,8 +202,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center py-4">
-                                Nenhum lançamento encontrado com este status.
+                            <td colspan="{{ $statusAtual === 'PENDENTE' ? 10 : 9 }}" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox" style="font-size:2rem"></i>
+                                <div class="mt-2">Nenhum lançamento encontrado com este status.</div>
                             </td>
                         </tr>
                     @endforelse
@@ -136,11 +212,34 @@
             </table>
         </div>
     </div>
+</form>
 
-    @if ($lancamentos->hasPages())
-        <nav aria-label="Page navigation" class="mt-4">
-            {{ $lancamentos->links() }}
-        </nav>
-    @endif
-</div>
+@if ($lancamentos->hasPages())
+    <nav class="mt-3">{{ $lancamentos->links() }}</nav>
+@endif
+@endsection
+
+@section('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('selectAll');
+    const items = document.querySelectorAll('.item-check');
+    const btnLote = document.getElementById('btnAprovarLote');
+    const countEl = document.getElementById('countSelecionados');
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            items.forEach(i => i.checked = this.checked);
+            updateCount();
+        });
+        items.forEach(i => i.addEventListener('change', updateCount));
+    }
+
+    function updateCount() {
+        const checked = document.querySelectorAll('.item-check:checked').length;
+        if (countEl) countEl.textContent = checked;
+        if (btnLote) btnLote.style.display = checked > 0 ? '' : 'none';
+    }
+});
+</script>
 @endsection

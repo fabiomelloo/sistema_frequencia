@@ -12,6 +12,7 @@ class LancamentoSetorial extends Model
         'servidor_id',
         'evento_id',
         'setor_origem_id',
+        'competencia',
         'dias_trabalhados',
         'dias_noturnos',
         'valor',
@@ -61,6 +62,7 @@ class LancamentoSetorial extends Model
         return $this->belongsTo(User::class, 'id_validador');
     }
 
+    // Status helpers
     public function isPendente(): bool
     {
         return $this->status === \App\Enums\LancamentoStatus::PENDENTE;
@@ -83,6 +85,57 @@ class LancamentoSetorial extends Model
 
     public function podeSerEditado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::PENDENTE;
+        return in_array($this->status, [
+            \App\Enums\LancamentoStatus::PENDENTE,
+            \App\Enums\LancamentoStatus::REJEITADO,
+        ]);
+    }
+
+    public function podeSerReenviado(): bool
+    {
+        return $this->status === \App\Enums\LancamentoStatus::REJEITADO;
+    }
+
+    // Scopes para filtragem
+    public function scopeByCompetencia($query, string $competencia)
+    {
+        return $query->where('competencia', $competencia);
+    }
+
+    public function scopeByStatus($query, string $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    public function scopeBySetor($query, int $setorId)
+    {
+        return $query->where('setor_origem_id', $setorId);
+    }
+
+    public function scopeByServidor($query, int $servidorId)
+    {
+        return $query->where('servidor_id', $servidorId);
+    }
+
+    public function scopeByEvento($query, int $eventoId)
+    {
+        return $query->where('evento_id', $eventoId);
+    }
+
+    /**
+     * Verifica se já existe lançamento duplicado.
+     */
+    public static function existeDuplicata(int $servidorId, int $eventoId, string $competencia, ?int $ignorarId = null): bool
+    {
+        $query = self::where('servidor_id', $servidorId)
+            ->where('evento_id', $eventoId)
+            ->where('competencia', $competencia)
+            ->whereNotIn('status', [\App\Enums\LancamentoStatus::REJEITADO->value]);
+
+        if ($ignorarId) {
+            $query->where('id', '!=', $ignorarId);
+        }
+
+        return $query->exists();
     }
 }

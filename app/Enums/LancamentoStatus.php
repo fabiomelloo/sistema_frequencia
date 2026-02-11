@@ -21,7 +21,7 @@ enum LancamentoStatus: string
 
     public function podeSerEditado(): bool
     {
-        return $this === self::PENDENTE;
+        return in_array($this, [self::PENDENTE, self::REJEITADO]);
     }
 
     public function podeSerAprovado(): bool

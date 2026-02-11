@@ -10,22 +10,35 @@ use App\Http\Controllers\ServidorController;
 use App\Http\Controllers\EventoController;
 use App\Http\Controllers\PermissaoController;
 use App\Http\Controllers\PerfilController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\NotificacaoController;
 
 // Rotas públicas
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
 
-// Rota home - redireciona baseado no role
+// Rota home - redireciona para dashboard
 Route::get('/', [AuthController::class, 'home'])->middleware('auth')->name('home');
 
 // Middleware de autenticação
 Route::middleware(['auth'])->group(function () {
     
+    // ===== DASHBOARD =====
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
     // ===== PERFIL (acessível para todos os usuários autenticados) =====
     Route::prefix('perfil')->name('perfil.')->group(function () {
         Route::get('/', [PerfilController::class, 'show'])->name('show');
         Route::put('/', [PerfilController::class, 'update'])->name('update');
+    });
+
+    // ===== NOTIFICAÇÕES (acessível para todos os usuários autenticados) =====
+    Route::prefix('notificacoes')->name('notificacoes.')->group(function () {
+        Route::get('/', [NotificacaoController::class, 'index'])->name('index');
+        Route::post('/{notificacao}/ler', [NotificacaoController::class, 'marcarComoLida'])->name('ler');
+        Route::post('/ler-todas', [NotificacaoController::class, 'marcarTodasComoLidas'])->name('ler-todas');
     });
     
     // ===== SETORIAL (role: SETORIAL) =====
@@ -46,6 +59,7 @@ Route::middleware(['auth'])->group(function () {
         Route::prefix('painel')->name('painel.')->group(function () {
             Route::get('/', [PainelConferenciaController::class, 'index'])->name('index');
             Route::post('/exportar', [PainelConferenciaController::class, 'exportar'])->name('exportar');
+            Route::post('/aprovar-lote', [PainelConferenciaController::class, 'aprovarEmLote'])->name('aprovar-lote');
             Route::get('/{lancamento}', [PainelConferenciaController::class, 'show'])
                 ->whereNumber('lancamento')
                 ->name('show');
@@ -69,7 +83,10 @@ Route::middleware(['auth'])->group(function () {
             Route::patch('permissoes/{setor}/{evento}/toggle', [PermissaoController::class, 'toggle'])->name('permissoes.toggle');
             Route::delete('servidores/{servidor}/desativar', [ServidorController::class, 'destroy'])->name('servidores.destroy');
             Route::post('servidores/{servidor}/ativar', [ServidorController::class, 'ativar'])->name('servidores.ativar');
+
+            // ===== AUDITORIA =====
+            Route::get('audit', [AuditLogController::class, 'index'])->name('audit.index');
+            Route::get('audit/{auditLog}', [AuditLogController::class, 'show'])->name('audit.show');
         });
     });
 });
-
