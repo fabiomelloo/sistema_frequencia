@@ -37,6 +37,7 @@
                         <tr>
                             <th>Código</th>
                             <th>Descrição</th>
+                            <th>Tipo</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
@@ -46,6 +47,13 @@
                             <tr>
                                 <td><strong>{{ $evento->codigo_evento }}</strong></td>
                                 <td>{{ $evento->descricao }}</td>
+                                <td>
+                                    @if($evento->tipo_evento)
+                                        <span class="badge bg-info text-dark">{{ $evento->tipo_evento->label() }}</span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
                                 <td>
                                     @if ($evento->ativo)
                                         <span class="badge bg-success">Ativo</span>

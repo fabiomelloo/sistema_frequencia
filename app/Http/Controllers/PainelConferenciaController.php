@@ -10,6 +10,7 @@ use App\Services\GeradorTxtFolhaService;
 use App\Services\AuditService;
 use App\Services\NotificacaoService;
 use App\Http\Requests\RejeitarLancamentoRequest;
+use App\Http\Requests\AprovarEmLoteRequest;
 use App\Enums\LancamentoStatus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -29,7 +30,6 @@ class PainelConferenciaController extends Controller
         $query = LancamentoSetorial::where('status', $status)
             ->with(['servidor', 'evento', 'setorOrigem', 'validador']);
 
-        // Filtros
         if ($request->filled('competencia')) {
             $query->where('competencia', $request->competencia);
         }
@@ -40,7 +40,7 @@ class PainelConferenciaController extends Controller
             $query->where('evento_id', $request->evento_id);
         }
         if ($request->filled('busca')) {
-            $busca = $request->busca;
+            $busca = addcslashes($request->busca, '%_');
             $query->whereHas('servidor', function ($q) use ($busca) {
                 $q->where('nome', 'like', "%{$busca}%")
                   ->orWhere('matricula', 'like', "%{$busca}%");
@@ -49,14 +49,11 @@ class PainelConferenciaController extends Controller
 
         $lancamentos = $query->orderBy('created_at', 'asc')->paginate(15)->withQueryString();
 
-        $contadores = [
-            'PENDENTE' => LancamentoSetorial::where('status', LancamentoStatus::PENDENTE)->count(),
-            'CONFERIDO' => LancamentoSetorial::where('status', LancamentoStatus::CONFERIDO)->count(),
-            'REJEITADO' => LancamentoSetorial::where('status', LancamentoStatus::REJEITADO)->count(),
-            'EXPORTADO' => LancamentoSetorial::where('status', LancamentoStatus::EXPORTADO)->count(),
-        ];
+        $contadores = [];
+        foreach (LancamentoStatus::cases() as $s) {
+            $contadores[$s->value] = LancamentoSetorial::where('status', $s)->count();
+        }
 
-        // Dados para filtros
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
         $eventos = EventoFolha::where('ativo', true)->orderBy('descricao')->get();
         $competencias = LancamentoSetorial::select('competencia')
@@ -75,7 +72,7 @@ class PainelConferenciaController extends Controller
 
     public function show(LancamentoSetorial $lancamento): View
     {
-        $lancamento->load(['servidor', 'evento', 'setorOrigem', 'validador']);
+        $lancamento->load(['servidor', 'evento', 'setorOrigem', 'validador', 'conferidoSetorialPor']);
 
         return view('painel.show', [
             'lancamento' => $lancamento,
@@ -84,10 +81,10 @@ class PainelConferenciaController extends Controller
 
     public function aprovar(LancamentoSetorial $lancamento): RedirectResponse
     {
-        if (!$lancamento->isPendente()) {
+        if (!$lancamento->isConferidoSetorial()) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Apenas lançamentos com status PENDENTE podem ser aprovados.']);
+                ->withErrors(['error' => 'Apenas lançamentos com status CONFERIDO SETORIAL podem ser aprovados pela Central.']);
         }
 
         $lancamento->status = LancamentoStatus::CONFERIDO;
@@ -98,7 +95,7 @@ class PainelConferenciaController extends Controller
         $lancamento->load(['servidor', 'evento']);
 
         AuditService::aprovou('LancamentoSetorial', $lancamento->id,
-            "Lançamento aprovado: {$lancamento->servidor->nome} - {$lancamento->evento->descricao}"
+            "Lançamento aprovado (Central): {$lancamento->servidor->nome} - {$lancamento->evento->descricao}"
         );
 
         NotificacaoService::lancamentoAprovado($lancamento);
@@ -110,10 +107,10 @@ class PainelConferenciaController extends Controller
 
     public function rejeitar(RejeitarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
     {
-        if (!$lancamento->isPendente()) {
+        if (!$lancamento->isPendente() && !$lancamento->isConferidoSetorial()) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Apenas lançamentos com status PENDENTE podem ser rejeitados.']);
+                ->withErrors(['error' => 'Apenas lançamentos PENDENTES ou CONFERIDOS SETORIAL podem ser rejeitados.']);
         }
 
         $validated = $request->validated();
@@ -138,21 +135,17 @@ class PainelConferenciaController extends Controller
     }
 
     /**
-     * Aprovação em lote
+     * Aprovação em lote (requer CONFERIDO_SETORIAL — respeita workflow de 2 etapas)
      */
-    public function aprovarEmLote(Request $request): RedirectResponse
+    public function aprovarEmLote(AprovarEmLoteRequest $request): RedirectResponse
     {
-        $request->validate([
-            'lancamento_ids' => ['required', 'array', 'min:1'],
-            'lancamento_ids.*' => ['integer', 'exists:lancamentos_setoriais,id'],
-        ]);
-
-        $ids = $request->lancamento_ids;
+        $ids = $request->validated()['lancamento_ids'];
         $aprovados = 0;
+        $ignorados = 0;
 
         foreach ($ids as $id) {
             $lancamento = LancamentoSetorial::find($id);
-            if ($lancamento && $lancamento->isPendente()) {
+            if ($lancamento && $lancamento->isConferidoSetorial()) {
                 $lancamento->status = LancamentoStatus::CONFERIDO;
                 $lancamento->id_validador = auth()->id();
                 $lancamento->validated_at = now();
@@ -166,12 +159,46 @@ class PainelConferenciaController extends Controller
 
                 NotificacaoService::lancamentoAprovado($lancamento);
                 $aprovados++;
+            } else {
+                $ignorados++;
             }
+        }
+
+        $mensagem = "{$aprovados} lançamento(s) aprovado(s) com sucesso!";
+        if ($ignorados > 0) {
+            $mensagem .= " ({$ignorados} ignorado(s) por não estarem conferidos pelo setor.)";
         }
 
         return redirect()
             ->back()
-            ->with('success', "{$aprovados} lançamento(s) aprovado(s) com sucesso!");
+            ->with('success', $mensagem);
+    }
+
+    /**
+     * Estorno: EXPORTADO → CONFERIDO (reverter exportação)
+     */
+    public function estornar(LancamentoSetorial $lancamento): RedirectResponse
+    {
+        if (!$lancamento->isExportado()) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Apenas lançamentos EXPORTADOS podem ser estornados.']);
+        }
+
+        $dadosAntes = $lancamento->toArray();
+
+        $lancamento->status = LancamentoStatus::ESTORNADO;
+        $lancamento->exportado_em = null;
+        $lancamento->save();
+
+        AuditService::registrar('ESTORNOU', 'LancamentoSetorial', $lancamento->id,
+            "Lançamento estornado (exportação revertida)",
+            $dadosAntes, $lancamento->fresh()->toArray()
+        );
+
+        return redirect()
+            ->back()
+            ->with('success', 'Lançamento estornado com sucesso! Retornará para conferência.');
     }
 
     public function exportar(Request $request): BinaryFileResponse|RedirectResponse

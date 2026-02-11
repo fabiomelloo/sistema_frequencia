@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setor;
 use App\Models\EventoFolha;
+use App\Http\Requests\StorePermissaoRequest;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -28,12 +29,9 @@ class PermissaoController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StorePermissaoRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'setor_id' => ['required', 'exists:setores,id'],
-            'evento_id' => ['required', 'exists:eventos_folha,id'],
-        ]);
+        $validated = $request->validated();
 
         $setor = Setor::findOrFail($validated['setor_id']);
         $evento = EventoFolha::findOrFail($validated['evento_id']);

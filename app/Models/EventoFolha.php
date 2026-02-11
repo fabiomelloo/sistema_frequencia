@@ -12,8 +12,8 @@ class EventoFolha extends Model
     protected $table = 'eventos_folha';
     protected $fillable = [
         'codigo_evento',
-        'tipo_evento',
         'descricao',
+        'tipo_evento',
         'exige_dias',
         'exige_valor',
         'valor_minimo',

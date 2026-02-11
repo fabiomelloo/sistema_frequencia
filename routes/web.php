@@ -13,6 +13,10 @@ use App\Http\Controllers\PerfilController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\NotificacaoController;
+use App\Http\Controllers\CompetenciaController;
+use App\Http\Controllers\RelatorioController;
+use App\Http\Controllers\DelegacaoController;
+use App\Http\Controllers\ImportacaoController;
 
 // Rotas públicas
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
@@ -47,10 +51,32 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/', [LancamentoSetorialController::class, 'index'])->name('index');
             Route::get('/create', [LancamentoSetorialController::class, 'create'])->name('create');
             Route::post('/', [LancamentoSetorialController::class, 'store'])->name('store');
+
+            // Lixeira (soft delete)
+            Route::get('/lixeira', [LancamentoSetorialController::class, 'lixeira'])->name('lixeira');
+            Route::post('/lixeira/{id}/restaurar', [LancamentoSetorialController::class, 'restaurar'])->name('restaurar');
+
+            // Aprovação setorial
+            Route::post('/aprovar-setorial-lote', [LancamentoSetorialController::class, 'aprovarSetorialEmLote'])->name('aprovar-setorial-lote');
+
+            // Importação CSV (antes de {lancamento})
+            Route::get('/importar', [ImportacaoController::class, 'form'])->name('importar.form');
+            Route::post('/importar', [ImportacaoController::class, 'importar'])->name('importar');
+
+            // Delegações (antes de {lancamento})
+            Route::prefix('delegacoes')->name('delegacoes.')->group(function () {
+                Route::get('/', [DelegacaoController::class, 'index'])->name('index');
+                Route::post('/', [DelegacaoController::class, 'store'])->name('store');
+                Route::post('/{delegacao}/revogar', [DelegacaoController::class, 'revogar'])->name('revogar');
+            });
+
             Route::get('/{lancamento}', [LancamentoSetorialController::class, 'show'])->name('show');
             Route::get('/{lancamento}/edit', [LancamentoSetorialController::class, 'edit'])->name('edit');
             Route::put('/{lancamento}', [LancamentoSetorialController::class, 'update'])->name('update');
             Route::delete('/{lancamento}', [LancamentoSetorialController::class, 'destroy'])->name('destroy');
+            Route::post('/{lancamento}/aprovar-setorial', [LancamentoSetorialController::class, 'aprovarSetorial'])->name('aprovar-setorial');
+
+
         });
     });
 
@@ -69,6 +95,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/{lancamento}/rejeitar', [PainelConferenciaController::class, 'rejeitar'])
                 ->whereNumber('lancamento')
                 ->name('rejeitar');
+            Route::post('/{lancamento}/estornar', [PainelConferenciaController::class, 'estornar'])
+                ->whereNumber('lancamento')
+                ->name('estornar');
         });
 
         // ===== PAINEL ADMINISTRATIVO =====
@@ -87,6 +116,23 @@ Route::middleware(['auth'])->group(function () {
             // ===== AUDITORIA =====
             Route::get('audit', [AuditLogController::class, 'index'])->name('audit.index');
             Route::get('audit/{auditLog}', [AuditLogController::class, 'show'])->name('audit.show');
+
+            // ===== COMPETÊNCIAS =====
+            Route::prefix('competencias')->name('competencias.')->group(function () {
+                Route::get('/', [CompetenciaController::class, 'index'])->name('index');
+                Route::post('/', [CompetenciaController::class, 'store'])->name('store');
+                Route::post('/{competencia}/fechar', [CompetenciaController::class, 'fechar'])->name('fechar');
+                Route::post('/{competencia}/reabrir', [CompetenciaController::class, 'reabrir'])->name('reabrir');
+            });
+
+            // ===== RELATÓRIOS =====
+            Route::prefix('relatorios')->name('relatorios.')->group(function () {
+                Route::get('/resumo', [RelatorioController::class, 'resumo'])->name('resumo');
+                Route::get('/comparativo', [RelatorioController::class, 'comparativo'])->name('comparativo');
+                Route::get('/folha-espelho', [RelatorioController::class, 'folhaEspelho'])->name('folha-espelho');
+                Route::get('/exportar-csv', [RelatorioController::class, 'exportarCsv'])->name('exportar-csv');
+            });
         });
     });
 });
+

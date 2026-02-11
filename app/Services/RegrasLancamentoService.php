@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Servidor;
 use App\Models\EventoFolha;
+use App\Models\LancamentoSetorial;
+use App\Models\Competencia;
 use App\Enums\TipoEvento;
 use InvalidArgumentException;
 use Carbon\Carbon;
@@ -13,17 +15,81 @@ class RegrasLancamentoService
     public function validar(
         Servidor $servidor,
         EventoFolha $evento,
-        array $dados
+        array $dados,
+        ?int $lancamentoId = null
     ): void {
-        $this->validarDias($evento, $dados);
+        $competencia = $dados['competencia'] ?? now()->format('Y-m');
+
+        // 1. Competência aberta
+        $this->validarCompetenciaAberta($competencia);
+
+        // 2. Servidor ativo na competência
+        $this->validarServidorAtivo($servidor, $competencia);
+
+        // 3. Dias individuais
+        $this->validarDias($evento, $dados, $competencia);
+
+        // 4. Limite de dias acumulados por servidor/competência
+        $this->validarLimiteDias($servidor, $competencia, $dados, $lancamentoId);
+
+        // 5. Periculosidade individual
         $this->validarPericulosidade($dados);
-        $this->validarGratificacao($evento, $dados);
-        $this->validarAdicionalTurno($servidor, $evento, $dados);
-        $this->validarAdicionalNoturno($servidor, $evento, $dados);
+
+        // 6. Insalubridade individual
         $this->validarInsalubridade($dados);
+
+        // 7. Incompatibilidade cruzada (insalubridade vs periculosidade entre lançamentos)
+        $this->validarIncompatibilidadeCruzada($servidor, $competencia, $dados, $lancamentoId);
+
+        // 8. Gratificação
+        $this->validarGratificacao($evento, $dados);
+
+        // 9. Adicional turno
+        $this->validarAdicionalTurno($servidor, $evento, $dados);
+
+        // 10. Adicional noturno
+        $this->validarAdicionalNoturno($servidor, $evento, $dados);
+
+        // 11. Valor mínimo/máximo do evento
+        $this->validarValorLimites($evento, $dados);
     }
 
-    private function validarDias(EventoFolha $evento, array $dados): void
+    private function validarCompetenciaAberta(string $competencia): void
+    {
+        $comp = Competencia::buscarPorReferencia($competencia);
+        
+        // Se não existe competência cadastrada, permitir (modo legado)
+        if (!$comp) {
+            return;
+        }
+
+        if ($comp->estaFechada()) {
+            throw new InvalidArgumentException(
+                "A competência {$competencia} está fechada. Não é possível criar ou editar lançamentos."
+            );
+        }
+
+        if ($comp->prazoExpirado()) {
+            throw new InvalidArgumentException(
+                "O prazo para lançamentos na competência {$competencia} expirou em {$comp->data_limite->format('d/m/Y')}."
+            );
+        }
+    }
+
+    private function validarServidorAtivo(Servidor $servidor, string $competencia): void
+    {
+        if (!$servidor->estaAtivoNaCompetencia($competencia)) {
+            $msg = "O servidor {$servidor->nome} não estava ativo na competência {$competencia}.";
+            
+            if ($servidor->data_desligamento) {
+                $msg .= " Desligamento em {$servidor->data_desligamento->format('d/m/Y')}.";
+            }
+            
+            throw new InvalidArgumentException($msg);
+        }
+    }
+
+    private function validarDias(EventoFolha $evento, array $dados, string $competencia): void
     {
         $diasTrabalhados = $dados['dias_trabalhados'] ?? null;
 
@@ -32,7 +98,7 @@ class RegrasLancamentoService
         }
 
         if (!empty($diasTrabalhados)) {
-            $diasNoMes = Carbon::now()->daysInMonth;
+            $diasNoMes = Carbon::createFromFormat('Y-m', $competencia)->daysInMonth;
             
             if ($diasTrabalhados < 1) {
                 throw new InvalidArgumentException('Dias trabalhados deve ser pelo menos 1.');
@@ -49,6 +115,41 @@ class RegrasLancamentoService
                     "Dias trabalhados não pode ser maior que {$evento->dias_maximo} para este evento."
                 );
             }
+        }
+    }
+
+    private function validarLimiteDias(Servidor $servidor, string $competencia, array $dados, ?int $lancamentoId): void
+    {
+        $diasTrabalhados = $dados['dias_trabalhados'] ?? 0;
+        if ($diasTrabalhados <= 0) {
+            return;
+        }
+
+        $diasJaLancados = LancamentoSetorial::somaDiasServidor($servidor->id, $competencia, $lancamentoId);
+        $diasNoMes = Carbon::createFromFormat('Y-m', $competencia)->daysInMonth;
+        $total = $diasJaLancados + $diasTrabalhados;
+
+        if ($total > $diasNoMes) {
+            throw new InvalidArgumentException(
+                "Limite de dias excedido para {$servidor->nome} na competência {$competencia}. " .
+                "Já lançados: {$diasJaLancados} dias. Informado: {$diasTrabalhados} dias. " .
+                "Total ({$total}) ultrapassa os {$diasNoMes} dias do mês."
+            );
+        }
+    }
+
+    private function validarIncompatibilidadeCruzada(Servidor $servidor, string $competencia, array $dados, ?int $lancamentoId): void
+    {
+        $mensagem = LancamentoSetorial::temIncompatibilidadeCruzada(
+            $servidor->id,
+            $competencia,
+            $dados['porcentagem_insalubridade'] ?? null,
+            $dados['porcentagem_periculosidade'] ?? null,
+            $lancamentoId
+        );
+
+        if ($mensagem) {
+            throw new InvalidArgumentException($mensagem);
         }
     }
 
@@ -180,6 +281,33 @@ class RegrasLancamentoService
                     );
                 }
             }
+        }
+    }
+
+    private function validarValorLimites(EventoFolha $evento, array $dados): void
+    {
+        $valor = $dados['valor'] ?? null;
+        $valorGratificacao = $dados['valor_gratificacao'] ?? null;
+        $valorTotal = $valor ?? $valorGratificacao;
+
+        if (empty($valorTotal)) {
+            return;
+        }
+
+        if ($evento->valor_minimo && $valorTotal < $evento->valor_minimo) {
+            throw new InvalidArgumentException(
+                "O valor R\$ " . number_format($valorTotal, 2, ',', '.') . 
+                " está abaixo do mínimo permitido de R\$ " . number_format($evento->valor_minimo, 2, ',', '.') . 
+                " para este evento."
+            );
+        }
+
+        if ($evento->valor_maximo && $valorTotal > $evento->valor_maximo) {
+            throw new InvalidArgumentException(
+                "O valor R\$ " . number_format($valorTotal, 2, ',', '.') . 
+                " está acima do máximo permitido de R\$ " . number_format($evento->valor_maximo, 2, ',', '.') . 
+                " para este evento."
+            );
         }
     }
 }

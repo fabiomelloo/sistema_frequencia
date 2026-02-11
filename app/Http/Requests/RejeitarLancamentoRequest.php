@@ -8,7 +8,7 @@ class RejeitarLancamentoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return auth()->user()->isCentral();
     }
 
     public function rules(): array

@@ -11,7 +11,7 @@ class StoreLancamentoSetorialRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return true;
+        return auth()->user()->isSetorial();
     }
 
     public function rules(): array

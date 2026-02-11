@@ -8,8 +8,10 @@ use App\Models\Servidor;
 use App\Models\Setor;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
 use App\Http\Requests\UpdateLancamentoSetorialRequest;
+use App\Http\Requests\AprovarSetorialEmLoteRequest;
 use App\Services\RegrasLancamentoService;
 use App\Services\AuditService;
+use App\Services\NotificacaoService;
 use App\Enums\LancamentoStatus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -24,15 +26,13 @@ class LancamentoSetorialController extends Controller
         $query = LancamentoSetorial::where('setor_origem_id', $user->setor_id)
             ->with(['servidor', 'evento', 'setorOrigem']);
 
-        // Filtros
         if ($request->filled('competencia')) {
             $query->where('competencia', $request->competencia);
         }
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         } else {
-            // Por padrão, não mostra exportados
-            $query->where('status', '!=', LancamentoStatus::EXPORTADO->value);
+            $query->whereNotIn('status', [LancamentoStatus::EXPORTADO->value]);
         }
         if ($request->filled('servidor_id')) {
             $query->where('servidor_id', $request->servidor_id);
@@ -41,7 +41,7 @@ class LancamentoSetorialController extends Controller
             $query->where('evento_id', $request->evento_id);
         }
         if ($request->filled('busca')) {
-            $busca = $request->busca;
+            $busca = addcslashes($request->busca, '%_');
             $query->whereHas('servidor', function ($q) use ($busca) {
                 $q->where('nome', 'like', "%{$busca}%")
                   ->orWhere('matricula', 'like', "%{$busca}%");
@@ -50,7 +50,6 @@ class LancamentoSetorialController extends Controller
 
         $lancamentos = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
-        // Dados para filtros
         $servidores = Servidor::where('setor_id', $user->setor_id)
             ->where('ativo', true)->orderBy('nome')->get();
         $eventos = $user->setor->eventosPermitidos()
@@ -82,7 +81,6 @@ class LancamentoSetorialController extends Controller
             ->orderBy('eventos_folha.descricao')
             ->get();
 
-        // Competência padrão: mês atual
         $competenciaAtual = now()->format('Y-m');
 
         return view('lancamentos.create', [
@@ -104,7 +102,6 @@ class LancamentoSetorialController extends Controller
             $evento = EventoFolha::findOrFail($validated['evento_id']);
             $competencia = $validated['competencia'];
 
-            // Validar duplicata
             if (LancamentoSetorial::existeDuplicata($servidor->id, $evento->id, $competencia)) {
                 return redirect()
                     ->back()
@@ -158,7 +155,7 @@ class LancamentoSetorialController extends Controller
             abort(403, 'Não autorizado.');
         }
 
-        $lancamento->load(['servidor', 'evento', 'setorOrigem', 'validador']);
+        $lancamento->load(['servidor', 'evento', 'setorOrigem', 'validador', 'conferidoSetorialPor']);
 
         return view('lancamentos.show', [
             'lancamento' => $lancamento,
@@ -210,7 +207,6 @@ class LancamentoSetorialController extends Controller
             $evento = EventoFolha::findOrFail($validated['evento_id']);
             $competencia = $validated['competencia'] ?? $lancamento->competencia;
 
-            // Validar duplicata (ignorando o lançamento atual)
             if (LancamentoSetorial::existeDuplicata($servidor->id, $evento->id, $competencia, $lancamento->id)) {
                 return redirect()
                     ->back()
@@ -218,7 +214,7 @@ class LancamentoSetorialController extends Controller
                     ->withErrors(['error' => "Já existe um lançamento para este servidor com este evento na competência {$competencia}."]);
             }
 
-            $regrasService->validar($servidor, $evento, $validated);
+            $regrasService->validar($servidor, $evento, $validated, $lancamento->id);
 
             $lancamento->update([
                 'servidor_id' => $validated['servidor_id'],
@@ -235,7 +231,6 @@ class LancamentoSetorialController extends Controller
                 'observacao' => $validated['observacao'] ?? null,
             ]);
 
-            // Se era rejeitado e foi editado, volta para pendente (retrabalho)
             if ($lancamento->isRejeitado()) {
                 $lancamento->status = LancamentoStatus::PENDENTE;
                 $lancamento->motivo_rejeicao = null;
@@ -273,12 +268,100 @@ class LancamentoSetorialController extends Controller
         $lancamento->delete();
 
         AuditService::excluiu('LancamentoSetorial', $lancamento->id,
-            "Lançamento excluído: servidor_id={$lancamento->servidor_id}, evento_id={$lancamento->evento_id}",
+            "Lançamento excluído (lixeira): servidor_id={$lancamento->servidor_id}, evento_id={$lancamento->evento_id}",
             $dadosAntes
         );
 
         return redirect()
             ->route('lancamentos.index')
-            ->with('success', 'Lançamento deletado com sucesso!');
+            ->with('success', 'Lançamento movido para a lixeira!');
+    }
+
+    public function lixeira(): View
+    {
+        $user = auth()->user();
+
+        $lancamentos = LancamentoSetorial::onlyTrashed()
+            ->where('setor_origem_id', $user->setor_id)
+            ->with(['servidor', 'evento'])
+            ->orderBy('deleted_at', 'desc')
+            ->paginate(15);
+
+        return view('lancamentos.lixeira', [
+            'lancamentos' => $lancamentos,
+        ]);
+    }
+
+    public function restaurar(int $id): RedirectResponse
+    {
+        $user = auth()->user();
+
+        $lancamento = LancamentoSetorial::onlyTrashed()->findOrFail($id);
+
+        if ($lancamento->setor_origem_id !== $user->setor_id) {
+            abort(403, 'Não autorizado.');
+        }
+
+        $lancamento->restore();
+
+        AuditService::registrar('RESTAUROU', 'LancamentoSetorial', $lancamento->id,
+            "Lançamento restaurado da lixeira"
+        );
+
+        return redirect()
+            ->route('lancamentos.lixeira')
+            ->with('success', 'Lançamento restaurado com sucesso!');
+    }
+
+    public function aprovarSetorial(LancamentoSetorial $lancamento): RedirectResponse
+    {
+        $user = auth()->user();
+
+        if ($lancamento->setor_origem_id !== $user->setor_id) {
+            abort(403, 'Não autorizado.');
+        }
+
+        if (!$lancamento->isPendente()) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Apenas lançamentos PENDENTES podem ser conferidos pelo setor.']);
+        }
+
+        $lancamento->status = LancamentoStatus::CONFERIDO_SETORIAL;
+        $lancamento->conferido_setorial_por = $user->id;
+        $lancamento->conferido_setorial_em = now();
+        $lancamento->save();
+
+        $lancamento->load(['servidor', 'evento']);
+
+        AuditService::registrar('CONFERIU_SETORIAL', 'LancamentoSetorial', $lancamento->id,
+            "Conferido pelo setor: {$lancamento->servidor->nome} - {$lancamento->evento->descricao}"
+        );
+
+        return redirect()
+            ->back()
+            ->with('success', 'Lançamento conferido com sucesso! Aguarda aprovação da Central.');
+    }
+
+    public function aprovarSetorialEmLote(AprovarSetorialEmLoteRequest $request): RedirectResponse
+    {
+
+        $user = auth()->user();
+        $aprovados = 0;
+
+        foreach ($request->lancamento_ids as $id) {
+            $lancamento = LancamentoSetorial::find($id);
+            if ($lancamento && $lancamento->isPendente() && $lancamento->setor_origem_id === $user->setor_id) {
+                $lancamento->status = LancamentoStatus::CONFERIDO_SETORIAL;
+                $lancamento->conferido_setorial_por = $user->id;
+                $lancamento->conferido_setorial_em = now();
+                $lancamento->save();
+                $aprovados++;
+            }
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', "{$aprovados} lançamento(s) conferido(s) pelo setor!");
     }
 }

@@ -16,6 +16,7 @@ class UpdateServidorRequest extends FormRequest
         // Transformar checkbox ausente em false
         $this->merge([
             'ativo' => $this->has('ativo'),
+            'origem_registro' => $this->input('origem_registro') ?? $this->route('servidor')->origem_registro ?? 'MANUAL',
         ]);
     }
 

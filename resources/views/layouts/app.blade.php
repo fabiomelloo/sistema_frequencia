@@ -5,9 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Sistema de Frequência')</title>
-    <meta name="description" content="@yield('description', 'Sistema de Lançamentos de Frequência Setorial')">
-    <meta name="robots" content="noindex, nofollow">
+    <meta name="description" content="@yield('description', 'Sistema de Gestão de Frequência e Lançamentos Setoriais - Otimizado para eficiência.')">
+    <meta name="robots" content="index, follow">
     <meta name="author" content="Sistema de Frequência">
+    
+    <!-- Open Graph / SEO -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="@yield('title', 'Sistema de Frequência')">
+    <meta property="og:description" content="@yield('description', 'Sistema de Gestão de Frequência e Lançamentos Setoriais.')">
+    <meta property="og:url" content="{{ url()->current() }}">
+    <meta property="og:locale" content="pt_BR">
+
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -171,24 +179,40 @@
                         </li>
 
                         @if (auth()->user()->isSetorial())
-                            <li class="nav-item">
-                                <a class="nav-link {{ request()->routeIs('lancamentos.*') ? 'active' : '' }}" href="{{ route('lancamentos.index') }}">
-                                    <i class="bi bi-pencil-square"></i> Meus Lançamentos
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle {{ request()->routeIs('lancamentos.*') ? 'active' : '' }}" href="#" id="lancamentosDropdown" role="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-pencil-square"></i> Lançamentos
                                 </a>
+                                <ul class="dropdown-menu" aria-labelledby="lancamentosDropdown">
+                                    <li><a class="dropdown-item" href="{{ route('lancamentos.index') }}"><i class="bi bi-list-check me-2"></i>Gerenciar</a></li>
+                                    <li><a class="dropdown-item" href="{{ route('lancamentos.create') }}"><i class="bi bi-plus-circle me-2"></i>Novo Lançamento</a></li>
+                                    <li><a class="dropdown-item" href="{{ route('lancamentos.importar.form') }}"><i class="bi bi-upload me-2"></i>Importar CSV</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ route('lancamentos.lixeira') }}"><i class="bi bi-trash me-2"></i>Lixeira</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ route('lancamentos.delegacoes.index') }}"><i class="bi bi-person-up me-2"></i>Delegações</a></li>
+                                </ul>
                             </li>
                         @endif
 
                         @if (auth()->user()->isCentral())
                             <li class="nav-item">
                                 <a class="nav-link {{ request()->routeIs('painel.*') ? 'active' : '' }}" href="{{ route('painel.index') }}">
-                                    <i class="bi bi-clipboard-check"></i> Painel de Conferência
+                                    <i class="bi bi-clipboard-check"></i> Painel
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('admin.relatorios.*') ? 'active' : '' }}" href="{{ route('admin.relatorios.resumo') }}">
+                                    <i class="bi bi-bar-chart"></i> Relatórios
                                 </a>
                             </li>
                             <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.*') ? 'active' : '' }}" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
+                                <a class="nav-link dropdown-toggle {{ request()->routeIs('admin.*') && !request()->routeIs('admin.relatorios.*') ? 'active' : '' }}" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
                                     <i class="bi bi-gear"></i> Administração
                                 </a>
                                 <ul class="dropdown-menu" aria-labelledby="adminDropdown">
+                                    <li><a class="dropdown-item" href="{{ route('admin.competencias.index') }}"><i class="bi bi-calendar-check me-2"></i>Competências</a></li>
+                                    <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ route('admin.users.index') }}"><i class="bi bi-people me-2"></i>Usuários</a></li>
                                     <li><a class="dropdown-item" href="{{ route('admin.setores.index') }}"><i class="bi bi-building me-2"></i>Setores</a></li>
                                     <li><a class="dropdown-item" href="{{ route('admin.servidores.index') }}"><i class="bi bi-person-badge me-2"></i>Servidores</a></li>

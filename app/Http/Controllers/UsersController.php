@@ -77,7 +77,13 @@ class UsersController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
+        $dadosUsuario = $user->toArray();
         $user->delete();
+
+        AuditService::deletou('User', $user->id,
+            "Usuário deletado: {$user->name} ({$user->email})",
+            $dadosUsuario
+        );
 
         return redirect()
             ->route('admin.users.index')

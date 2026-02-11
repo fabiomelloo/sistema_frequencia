@@ -34,7 +34,7 @@ class SecurityHeaders
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; " .
             "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; " .
             "img-src 'self' data:; " .
-            "connect-src 'self';"
+            "connect-src 'self' https://cdn.jsdelivr.net;"
         );
 
         // Strict Transport Security (em produção)

@@ -21,14 +21,14 @@
 
 @if (session('success'))
     <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle me-1"></i>{{ session('success') }}
+        <i class="bi bi-check-circle me-1"></i> {{ session('success') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 @endif
 
 @if ($errors->any())
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <strong><i class="bi bi-exclamation-triangle me-1"></i></strong>{{ $errors->first() }}
+        <strong><i class="bi bi-exclamation-triangle me-1"></i> </strong>{{ $errors->first() }}
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 @endif
@@ -38,17 +38,29 @@
     <div class="card-body py-2">
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <span class="text-muted fw-semibold me-2" style="font-size:0.85rem">Status:</span>
+            
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO_SETORIAL'])) }}" class="btn btn-sm {{ $statusAtual === 'CONFERIDO_SETORIAL' ? 'btn-info text-white' : 'btn-outline-info' }}">
+                <i class="bi bi-check2-circle me-1"></i>Conf. Setorial <span class="badge bg-white text-dark ms-1">{{ $contadores['CONFERIDO_SETORIAL'] ?? 0 }}</span>
+            </a>
+
             <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'PENDENTE'])) }}" class="btn btn-sm {{ $statusAtual === 'PENDENTE' ? 'btn-warning' : 'btn-outline-warning' }}">
-                <i class="bi bi-hourglass-split me-1"></i>Pendentes <span class="badge bg-dark ms-1">{{ $contadores['PENDENTE'] }}</span>
+                <i class="bi bi-hourglass-split me-1"></i>Pendentes <span class="badge bg-dark ms-1">{{ $contadores['PENDENTE'] ?? 0 }}</span>
             </a>
+            
             <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO'])) }}" class="btn btn-sm {{ $statusAtual === 'CONFERIDO' ? 'btn-success' : 'btn-outline-success' }}">
-                <i class="bi bi-check-circle me-1"></i>Conferidos <span class="badge bg-dark ms-1">{{ $contadores['CONFERIDO'] }}</span>
+                <i class="bi bi-check-circle me-1"></i>Conferidos <span class="badge bg-dark ms-1">{{ $contadores['CONFERIDO'] ?? 0 }}</span>
             </a>
+            
             <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'REJEITADO'])) }}" class="btn btn-sm {{ $statusAtual === 'REJEITADO' ? 'btn-danger' : 'btn-outline-danger' }}">
-                <i class="bi bi-x-circle me-1"></i>Rejeitados <span class="badge bg-dark ms-1">{{ $contadores['REJEITADO'] }}</span>
+                <i class="bi bi-x-circle me-1"></i>Rejeitados <span class="badge bg-dark ms-1">{{ $contadores['REJEITADO'] ?? 0 }}</span>
             </a>
+            
             <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'EXPORTADO'])) }}" class="btn btn-sm {{ $statusAtual === 'EXPORTADO' ? 'btn-secondary' : 'btn-outline-secondary' }}">
-                <i class="bi bi-download me-1"></i>Exportados <span class="badge bg-dark ms-1">{{ $contadores['EXPORTADO'] }}</span>
+                <i class="bi bi-download me-1"></i>Exportados <span class="badge bg-dark ms-1">{{ $contadores['EXPORTADO'] ?? 0 }}</span>
+            </a>
+
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'ESTORNADO'])) }}" class="btn btn-sm {{ $statusAtual === 'ESTORNADO' ? 'btn-dark' : 'btn-outline-dark' }}">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Estornados <span class="badge bg-white text-dark ms-1">{{ $contadores['ESTORNADO'] ?? 0 }}</span>
             </a>
         </div>
     </div>
@@ -102,7 +114,7 @@
 <form action="{{ route('painel.aprovar-lote') }}" method="POST" id="formLote">
     @csrf
     <div class="card">
-        @if ($statusAtual === 'PENDENTE' && $lancamentos->count() > 0)
+        @if (in_array($statusAtual, ['PENDENTE', 'CONFERIDO_SETORIAL']) && $lancamentos->count() > 0)
             <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="selectAll">
@@ -117,16 +129,15 @@
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
-                        @if ($statusAtual === 'PENDENTE')
+                        @if (in_array($statusAtual, ['PENDENTE', 'CONFERIDO_SETORIAL']))
                             <th style="width:40px"></th>
                         @endif
                         <th>Matrícula</th>
                         <th>Servidor</th>
-                        <th>Evento</th>
+                        <th>Evento / Detalhes</th>
                         <th>Setor</th>
-                        <th>Competência</th>
-                        <th>Valor</th>
-                        <th>Data Lançamento</th>
+                        <th>Referência</th>
+                        <th>Status</th>
                         <th>Ações</th>
                     </tr>
                 </thead>
@@ -134,44 +145,63 @@
                     @forelse ($lancamentos as $lancamento)
                         <tr @class([
                             'table-warning' => $lancamento->isPendente(),
+                            'table-info' => $lancamento->isConferidoSetorial(),
                             'table-success' => $lancamento->isConferido(),
                             'table-danger' => $lancamento->isRejeitado(),
+                            'table-dark text-white' => $lancamento->status->value === 'ESTORNADO',
                         ])>
-                            @if ($statusAtual === 'PENDENTE')
+                            @if (in_array($statusAtual, ['PENDENTE', 'CONFERIDO_SETORIAL']))
                                 <td>
                                     <input class="form-check-input item-check" type="checkbox" name="lancamento_ids[]" value="{{ $lancamento->id }}">
                                 </td>
                             @endif
                             <td><strong>{{ $lancamento->servidor->matricula }}</strong></td>
                             <td>{{ $lancamento->servidor->nome }}</td>
-                            <td>{{ $lancamento->evento->descricao }}</td>
+                            <td>
+                                <div>{{ $lancamento->evento->descricao }}</div>
+                                <div class="small opacity-75">
+                                    @if($lancamento->valor) R$ {{ number_format($lancamento->valor, 2, ',', '.') }} @endif
+                                    @if($lancamento->dias_trabalhados) {{ $lancamento->dias_trabalhados }} dias @endif
+                                </div>
+                            </td>
                             <td>{{ $lancamento->setorOrigem->sigla ?? $lancamento->setorOrigem->nome }}</td>
                             <td>{{ $lancamento->competencia }}</td>
                             <td>
-                                @if ($lancamento->valor)
-                                    R$ {{ number_format($lancamento->valor, 2, ',', '.') }}
-                                @else
-                                    <span class="text-muted">---</span>
-                                @endif
+                                <span class="badge" style="background-color: {{ $lancamento->status->cor() }}">
+                                    {{ $lancamento->status->label() }}
+                                </span>
                             </td>
-                            <td>{{ $lancamento->created_at->format('d/m/Y H:i') }}</td>
                             <td>
-                                <a href="{{ route('painel.show', $lancamento) }}" class="btn btn-sm btn-outline-info" title="Visualizar">
-                                    <i class="bi bi-eye"></i>
-                                </a>
-                                @if ($lancamento->isPendente())
-                                    <form action="{{ route('painel.aprovar', $lancamento) }}" method="POST" style="display: inline;">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Aprovar">
-                                            <i class="bi bi-check-circle"></i>
-                                        </button>
-                                    </form>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejeicaoModal{{ $lancamento->id }}" title="Rejeitar">
-                                        <i class="bi bi-x-circle"></i>
-                                    </button>
+                                <div class="btn-group">
+                                    <a href="{{ route('painel.show', $lancamento) }}" class="btn btn-sm btn-outline-light text-dark border-secondary" title="Visualizar">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
 
-                                    {{-- Modal de Rejeição --}}
-                                    <div class="modal fade" id="rejeicaoModal{{ $lancamento->id }}" tabindex="-1">
+                                    @if ($lancamento->isConferidoSetorial() || $lancamento->isPendente())
+                                        <form action="{{ route('painel.aprovar', $lancamento) }}" method="POST">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-success" title="Aprovar">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejeicaoModal{{ $lancamento->id }}" title="Rejeitar">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    @endif
+
+                                    @if ($lancamento->isExportado())
+                                        <form action="{{ route('painel.estornar', $lancamento) }}" method="POST" onsubmit="return confirm('ATENÇÃO: Deseja realmente estornar este lançamento exportado?');">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-dark" title="Estornar Exportação">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+
+                                {{-- Modal de Rejeição --}}
+                                @if ($lancamento->isConferidoSetorial() || $lancamento->isPendente())
+                                    <div class="modal fade text-dark" id="rejeicaoModal{{ $lancamento->id }}" tabindex="-1">
                                         <div class="modal-dialog">
                                             <div class="modal-content">
                                                 <div class="modal-header bg-danger text-white">
@@ -202,9 +232,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ $statusAtual === 'PENDENTE' ? 10 : 9 }}" class="text-center py-4 text-muted">
-                                <i class="bi bi-inbox" style="font-size:2rem"></i>
-                                <div class="mt-2">Nenhum lançamento encontrado com este status.</div>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox display-1 opacity-25 mb-3"></i>
+                                <div class="h5">Nenhum lançamento encontrado em "{{ \App\Enums\LancamentoStatus::tryFrom($statusAtual)?->label() ?? $statusAtual }}"</div>
                             </td>
                         </tr>
                     @endforelse
