@@ -8,7 +8,7 @@ class AprovarEmLoteRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->isCentral();
+        return auth()->check() && auth()->user()->isCentral();
     }
 
     public function rules(): array

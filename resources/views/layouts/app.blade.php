@@ -331,7 +331,7 @@
     <footer class="py-3 border-top mt-4">
         <div class="container text-center">
             <p class="text-muted mb-0" style="font-size: 0.8rem">
-                <strong>Sistema de Frequência</strong> &copy; {{ date('Y') }}
+                <strong>ThellenD</strong> &copy; {{ date('Y') }}
                 @auth
                     &mdash; {{ auth()->user()->role->label() }}
                 @endauth

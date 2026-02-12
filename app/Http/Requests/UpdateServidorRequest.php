@@ -8,7 +8,7 @@ class UpdateServidorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->isCentral();
+        return auth()->check() && auth()->user()->isCentral();
     }
 
     protected function prepareForValidation(): void

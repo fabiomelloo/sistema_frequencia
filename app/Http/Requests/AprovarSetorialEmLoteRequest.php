@@ -8,7 +8,7 @@ class AprovarSetorialEmLoteRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->isSetorial();
+        return auth()->check() && auth()->user()->isSetorial();
     }
 
     public function rules(): array

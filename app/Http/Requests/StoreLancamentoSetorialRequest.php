@@ -3,163 +3,98 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use App\Models\Servidor;
 use App\Models\EventoFolha;
+use InvalidArgumentException;
 
 class StoreLancamentoSetorialRequest extends FormRequest
 {
-    private ?EventoFolha $eventoCache = null;
 
     public function authorize(): bool
     {
-        return auth()->user()->isSetorial();
+        return auth()->check() && auth()->user()->isSetorial();
     }
 
     public function rules(): array
     {
-        $user = auth()->user();
-        $evento = $this->getEvento(); // Cache da query
-
-        $rules = [
-            'competencia' => [
-                'required',
-                'string',
-                'regex:/^\d{4}-\d{2}$/',
-            ],
-            'servidor_id' => [
-                'required',
-                'exists:servidores,id',
-                function ($attribute, $value, $fail) use ($user) {
-                    $servidor = \App\Models\Servidor::find($value);
-                    if (!$servidor) {
-                        return;
-                    }
-                    if ($servidor->setor_id !== $user->setor_id) {
-                        $fail('Servidor não pertence ao seu setor.');
-                    }
-                    if (!$servidor->ativo) {
-                        $fail('Servidor está inativo e não pode receber lançamentos.');
-                    }
-                },
-            ],
-            'evento_id' => [
-                'required',
-                'exists:eventos_folha,id',
-                function ($attribute, $value, $fail) use ($user, $evento) {
-                    if (!$evento) {
-                        $fail('Evento inválido.');
-                        return;
-                    }
-                    if (!$evento->ativo) {
-                        $fail('Este evento está inativo e não pode ser utilizado.');
-                    }
-                    if (!$evento->temDireitoNoSetor($user->setor_id)) {
-                        $fail('Seu setor não possui direito a este evento.');
-                    }
-                },
-            ],
-            'dias_trabalhados' => [
-                'nullable',
-                'integer',
-                'min:0',
-                function ($attribute, $value, $fail) use ($evento) {
-                    if ($evento && $evento->exige_dias && is_null($value)) {
-                        $fail('Dias trabalhados é obrigatório para este evento.');
-                    }
-                    if ($evento && $evento->dias_maximo && $value > $evento->dias_maximo) {
-                        $fail("Máximo de dias permitido: {$evento->dias_maximo}");
-                    }
-                },
-            ],
-            'dias_noturnos' => [
-                'nullable',
-                'integer',
-                'min:0',
-                function ($attribute, $value, $fail) {
-                    if ($value && $this->dias_trabalhados && $value > $this->dias_trabalhados) {
-                        $fail('Dias noturnos não podem ser maiores que dias trabalhados.');
-                    }
-                },
-            ],
-            'valor' => [
-                'nullable',
-                'numeric',
-                'min:0',
-                function ($attribute, $value, $fail) use ($evento) {
-                    if ($evento && $evento->exige_valor && is_null($value)) {
-                        $fail('Valor é obrigatório para este evento.');
-                    }
-                    if ($evento && $evento->valor_minimo && $value < $evento->valor_minimo) {
-                        $fail("Valor mínimo: R$ " . number_format($evento->valor_minimo, 2, ',', '.'));
-                    }
-                    if ($evento && $evento->valor_maximo && $value > $evento->valor_maximo) {
-                        $fail("Valor máximo: R$ " . number_format($evento->valor_maximo, 2, ',', '.'));
-                    }
-                },
-            ],
-            'valor_gratificacao' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-            'porcentagem' => [
-                'nullable',
-                'numeric',
-                'min:0',
-                'max:100',
-            ],
-            'adicional_turno' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-            'adicional_noturno' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-            'porcentagem_insalubridade' => [
-                'nullable',
-                'integer',
-                'in:10,20,40',
-                function ($attribute, $value, $fail) use ($evento) {
-                    if ($evento && $evento->exige_porcentagem && is_null($value)) {
-                        $fail('Porcentagem de insalubridade é obrigatória para este evento.');
-                    }
-                    if ($evento && !$evento->exige_porcentagem && !is_null($value)) {
-                        $fail('Este evento não exige porcentagem de insalubridade.');
-                    }
-                },
-            ],
-            'porcentagem_periculosidade' => [
-                'nullable',
-                'integer',
-                'in:30', // Periculosidade geralmente é 30%
-            ],
-            'observacao' => [
-                'nullable',
-                'string',
-                'max:1000',
-                function ($attribute, $value, $fail) use ($evento) {
-                    if ($evento && $evento->exige_observacao && is_null($value)) {
-                        $fail('Observação é obrigatória para este evento.');
-                    }
-                },
-            ],
+        return [
+            'competencia' => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'servidor_id' => ['required', 'exists:servidores,id'],
+            'evento_id' => ['required', 'exists:eventos_folha,id'],
+            'dias_trabalhados' => ['nullable', 'integer', 'min:0'],
+            'dias_noturnos' => ['nullable', 'integer', 'min:0'],
+            'valor' => ['nullable', 'numeric', 'min:0'],
+            'valor_gratificacao' => ['nullable', 'numeric', 'min:0'],
+            'porcentagem' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'adicional_turno' => ['nullable', 'numeric', 'min:0'],
+            'adicional_noturno' => ['nullable', 'numeric', 'min:0'],
+            'porcentagem_insalubridade' => ['nullable', 'integer', 'in:10,20,40'],
+            'porcentagem_periculosidade' => ['nullable', 'integer', 'in:30'],
+            'observacao' => ['nullable', 'string', 'max:1000'],
         ];
-
-        return $rules;
     }
 
-    /**
-     * Cache do evento para evitar múltiplas queries
-     */
-    protected function getEvento(): ?EventoFolha
+    public function withValidator(Validator $validator): void
     {
-        if ($this->eventoCache === null && $this->has('evento_id')) {
-            $this->eventoCache = EventoFolha::find($this->evento_id);
-        }
-        
-        return $this->eventoCache;
+        $validator->after(function (Validator $validator) {
+            if ($validator->fails()) {
+                return;
+            }
+
+            $data = $this->all();
+
+            $servidor = Servidor::find($data['servidor_id'] ?? null);
+            $evento = EventoFolha::find($data['evento_id'] ?? null);
+
+            if (!$servidor || !$evento) {
+                return;
+            }
+
+            $user = auth()->user();
+
+            if ($servidor->setor_id !== $user->setor_id) {
+                $validator->errors()->add('servidor_id', 'Servidor não pertence ao seu setor.');
+                return;
+            }
+
+            if (!$servidor->ativo) {
+                $validator->errors()->add('servidor_id', 'Servidor está inativo e não pode receber lançamentos.');
+                return;
+            }
+
+            if (!$evento->ativo) {
+                $validator->errors()->add('evento_id', 'Este evento está inativo e não pode ser utilizado.');
+                return;
+            }
+
+            if (!$evento->temDireitoNoSetor($user->setor_id)) {
+                $validator->errors()->add('evento_id', 'Seu setor não possui direito a este evento.');
+                return;
+            }
+
+            try {
+                app(\App\Services\RegrasLancamentoService::class)->validar(
+                    $servidor,
+                    $evento,
+                    [
+                        'competencia'                => $data['competencia'] ?? null,
+                        'dias_trabalhados'           => $data['dias_trabalhados'] ?? null,
+                        'dias_noturnos'              => $data['dias_noturnos'] ?? null,
+                        'valor'                      => $data['valor'] ?? null,
+                        'valor_gratificacao'         => $data['valor_gratificacao'] ?? null,
+                        'porcentagem'                => $data['porcentagem'] ?? null,
+                        'adicional_turno'            => $data['adicional_turno'] ?? null,
+                        'adicional_noturno'          => $data['adicional_noturno'] ?? null,
+                        'porcentagem_insalubridade'  => $data['porcentagem_insalubridade'] ?? null,
+                        'porcentagem_periculosidade' => $data['porcentagem_periculosidade'] ?? null,
+                        'observacao'                 => $data['observacao'] ?? null,
+                    ]
+                );
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('regra_negocio', $e->getMessage());
+            }
+        });
     }
 
     public function messages(): array
