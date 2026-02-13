@@ -23,7 +23,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@sistema.com'],
             [
                 'name' => 'Admin',
-                'password' => 'password', // Mutator/Cast handling password hashing
+                'password' => 'password',
                 'role' => 'CENTRAL',
                 'setor_id' => $setor->id,
             ]

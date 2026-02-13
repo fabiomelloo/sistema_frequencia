@@ -21,8 +21,10 @@ return new class extends Migration
             ->whereNull('competencia')
             ->update(['competencia' => now()->format('Y-m')]);
 
-        // Passo 3: Tornar NOT NULL (raw SQL para compatibilidade PostgreSQL)
-        DB::statement('ALTER TABLE lancamentos_setoriais ALTER COLUMN competencia SET NOT NULL');
+        // Passo 3: Tornar NOT NULL (usando Schema builder para compatibilidade cross-database)
+        Schema::table('lancamentos_setoriais', function (Blueprint $table) {
+            $table->string('competencia', 7)->nullable(false)->change();
+        });
 
         // Passo 4: Índices (verifica se já existem)
         Schema::table('lancamentos_setoriais', function (Blueprint $table) {
