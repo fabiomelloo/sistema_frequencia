@@ -52,10 +52,14 @@ class StoreLancamentoSetorialRequest extends FormRequest
             }
 
             $user = auth()->user();
+            $setorDoServidor = $servidor->setor_id;
 
-            if ($servidor->setor_id !== $user->setor_id) {
-                $validator->errors()->add('servidor_id', 'Servidor não pertence ao seu setor.');
-                return;
+            // Verifica se o servidor pertence ao setor do usuário OU se há delegação ativa
+            if ($setorDoServidor !== $user->setor_id) {
+                if (!\App\Models\Delegacao::temDelegacaoAtiva($user->id, $setorDoServidor)) {
+                    $validator->errors()->add('servidor_id', 'Servidor não pertence ao seu setor e você não possui delegação ativa para o setor dele.');
+                    return;
+                }
             }
 
             if (!$servidor->ativo) {
@@ -68,8 +72,8 @@ class StoreLancamentoSetorialRequest extends FormRequest
                 return;
             }
 
-            if (!$evento->temDireitoNoSetor($user->setor_id)) {
-                $validator->errors()->add('evento_id', 'Seu setor não possui direito a este evento.');
+            if (!$evento->temDireitoNoSetor($setorDoServidor)) {
+                $validator->errors()->add('evento_id', 'O setor do servidor não possui direito a este evento.');
                 return;
             }
 

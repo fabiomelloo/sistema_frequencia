@@ -43,9 +43,15 @@ class ImportacaoController extends Controller
                 ->with('success', $mensagem);
 
         } catch (\Exception $e) {
+            \Log::error('Erro na importação CSV', [
+                'erro' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'usuario_id' => auth()->id(),
+            ]);
+
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Erro na importação: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Ocorreu um erro durante a importação. Verifique o formato do arquivo e tente novamente.']);
         }
     }
 }

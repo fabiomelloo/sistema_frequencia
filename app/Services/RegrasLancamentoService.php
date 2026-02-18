@@ -52,6 +52,9 @@ class RegrasLancamentoService
 
         // 11. Valor mínimo/máximo do evento
         $this->validarValorLimites($evento, $dados);
+
+        // 12. Limite de valor total acumulado por servidor na competência
+        $this->validarValorTotalServidor($servidor, $competencia, $dados, $lancamentoId);
     }
 
     private function validarCompetenciaAberta(string $competencia): void
@@ -307,6 +310,42 @@ class RegrasLancamentoService
                 "O valor R\$ " . number_format($valorTotal, 2, ',', '.') . 
                 " está acima do máximo permitido de R\$ " . number_format($evento->valor_maximo, 2, ',', '.') . 
                 " para este evento."
+            );
+        }
+    }
+
+    /**
+     * Regra 12: Limite de valor total acumulado por servidor na competência.
+     */
+    private function validarValorTotalServidor(Servidor $servidor, string $competencia, array $dados, ?int $lancamentoId): void
+    {
+        $limiteTotal = \App\Models\Configuracao::get('limite_valor_total_servidor');
+        if (empty($limiteTotal)) {
+            return; // Sem limite configurado, pula validação
+        }
+
+        $limiteTotal = (float) $limiteTotal;
+        $valorAtual = (float) ($dados['valor'] ?? $dados['valor_gratificacao'] ?? 0);
+
+        if ($valorAtual <= 0) {
+            return;
+        }
+
+        $query = LancamentoSetorial::where('servidor_id', $servidor->id)
+            ->where('competencia', $competencia)
+            ->whereNotIn('status', [\App\Enums\LancamentoStatus::REJEITADO->value, \App\Enums\LancamentoStatus::ESTORNADO->value]);
+
+        if ($lancamentoId) {
+            $query->where('id', '!=', $lancamentoId);
+        }
+
+        $valorAcumulado = (float) $query->sum('valor');
+
+        if (($valorAcumulado + $valorAtual) > $limiteTotal) {
+            throw new InvalidArgumentException(
+                "O valor total acumulado do servidor {$servidor->nome} nesta competência seria de R\$ " .
+                number_format($valorAcumulado + $valorAtual, 2, ',', '.') .
+                ", ultrapassando o limite de R\$ " . number_format($limiteTotal, 2, ',', '.') . "."
             );
         }
     }

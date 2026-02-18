@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Setor;
 use App\Services\UserService;
+use App\Services\AuditService;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 
@@ -80,7 +81,7 @@ class UsersController extends Controller
         $dadosUsuario = $user->toArray();
         $user->delete();
 
-        AuditService::deletou('User', $user->id,
+        AuditService::excluiu('User', $user->id,
             "Usuário deletado: {$user->name} ({$user->email})",
             $dadosUsuario
         );

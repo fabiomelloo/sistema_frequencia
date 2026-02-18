@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Sistema de Frequência')</title>
     <meta name="description" content="@yield('description', 'Sistema de Gestão de Frequência e Lançamentos Setoriais - Otimizado para eficiência.')">
-    <meta name="robots" content="index, follow">
+    <meta name="robots" content="noindex, nofollow">
     <meta name="author" content="Sistema de Frequência">
     
     <!-- Open Graph / SEO -->
@@ -15,6 +15,8 @@
     <meta property="og:description" content="@yield('description', 'Sistema de Gestão de Frequência e Lançamentos Setoriais.')">
     <meta property="og:url" content="{{ url()->current() }}">
     <meta property="og:locale" content="pt_BR">
+
+    <link rel="canonical" href="{{ url()->current() }}">
 
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <link rel="preconnect" href="https://fonts.googleapis.com">

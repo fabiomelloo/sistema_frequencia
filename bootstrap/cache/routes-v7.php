@@ -13,7 +13,7 @@ app('router')->setCompiledRoutes(
         array (
           0 => 
           array (
-            '_route' => 'generated::TvyEMiGNietvGKUt',
+            '_route' => 'generated::9BapOV5eTiphRMOv',
           ),
           1 => NULL,
           2 => 
@@ -50,7 +50,7 @@ app('router')->setCompiledRoutes(
         array (
           0 => 
           array (
-            '_route' => 'generated::8m3MxTMCAob4Pgiy',
+            '_route' => 'generated::GhiIgwRYDnSeH2hJ',
           ),
           1 => NULL,
           2 => 
@@ -1594,7 +1594,7 @@ app('router')->setCompiledRoutes(
   ),
   'attributes' => 
   array (
-    'generated::TvyEMiGNietvGKUt' => 
+    'generated::9BapOV5eTiphRMOv' => 
     array (
       'methods' => 
       array (
@@ -1622,8 +1622,8 @@ app('router')->setCompiledRoutes(
                     return response(\\Illuminate\\Support\\Facades\\View::file(\'C:\\\\Users\\\\User\\\\Desktop\\\\projetos\\\\sistema_frequencia\\\\vendor\\\\laravel\\\\framework\\\\src\\\\Illuminate\\\\Foundation\\\\Configuration\'.\'/../resources/health-up.blade.php\', [
                         \'exception\' => $exception,
                     ]), status: $exception ? 500 : 200);
-                }";s:5:"scope";s:54:"Illuminate\\Foundation\\Configuration\\ApplicationBuilder";s:4:"this";N;s:4:"self";s:32:"00000000000002960000000000000000";}}',
-        'as' => 'generated::TvyEMiGNietvGKUt',
+                }";s:5:"scope";s:54:"Illuminate\\Foundation\\Configuration\\ApplicationBuilder";s:4:"this";N;s:4:"self";s:32:"00000000000005a10000000000000000";}}',
+        'as' => 'generated::9BapOV5eTiphRMOv',
       ),
       'fallback' => false,
       'defaults' => 
@@ -1676,7 +1676,7 @@ app('router')->setCompiledRoutes(
       'waitSeconds' => NULL,
       'withTrashed' => false,
     ),
-    'generated::8m3MxTMCAob4Pgiy' => 
+    'generated::GhiIgwRYDnSeH2hJ' => 
     array (
       'methods' => 
       array (
@@ -1697,7 +1697,7 @@ app('router')->setCompiledRoutes(
         'where' => 
         array (
         ),
-        'as' => 'generated::8m3MxTMCAob4Pgiy',
+        'as' => 'generated::GhiIgwRYDnSeH2hJ',
       ),
       'fallback' => false,
       'defaults' => 

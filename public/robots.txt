@@ -1,0 +1,4 @@
+# Sistema de Frequencia - Sistema Interno
+# Bloquear toda indexação por motores de busca
+User-agent: *
+Disallow: /

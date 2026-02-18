@@ -6,6 +6,7 @@ use App\Models\LancamentoSetorial;
 use App\Models\EventoFolha;
 use App\Models\Servidor;
 use App\Models\Setor;
+use App\Models\Competencia;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
 use App\Http\Requests\UpdateLancamentoSetorialRequest;
 use App\Http\Requests\AprovarSetorialEmLoteRequest;
@@ -26,27 +27,15 @@ class LancamentoSetorialController extends Controller
         $query = LancamentoSetorial::where('setor_origem_id', $user->setor_id)
             ->with(['servidor', 'evento', 'setorOrigem']);
 
-        if ($request->filled('competencia')) {
-            $query->where('competencia', $request->competencia);
-        }
+        $filtros = $request->only(['competencia', 'servidor_id', 'evento_id', 'busca']);
+
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $filtros['status'] = $request->status;
         } else {
             $query->whereNotIn('status', [LancamentoStatus::EXPORTADO->value]);
         }
-        if ($request->filled('servidor_id')) {
-            $query->where('servidor_id', $request->servidor_id);
-        }
-        if ($request->filled('evento_id')) {
-            $query->where('evento_id', $request->evento_id);
-        }
-        if ($request->filled('busca')) {
-            $busca = addcslashes($request->busca, '%_');
-            $query->whereHas('servidor', function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                  ->orWhere('matricula', 'like', "%{$busca}%");
-            });
-        }
+
+        $query->filtrar($filtros);
 
         $lancamentos = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
@@ -111,10 +100,13 @@ class LancamentoSetorialController extends Controller
 
             $regrasService->validar($servidor, $evento, $validated);
 
+            // Usa setor histórico do servidor na competência
+            $setorOrigem = $servidor->setorNaCompetencia($competencia);
+
             $lancamento = LancamentoSetorial::create([
                 'servidor_id' => $validated['servidor_id'],
                 'evento_id' => $validated['evento_id'],
-                'setor_origem_id' => $user->setor_id,
+                'setor_origem_id' => $setorOrigem,
                 'competencia' => $competencia,
                 'dias_trabalhados' => $validated['dias_trabalhados'] ?? null,
                 'dias_noturnos' => $validated['dias_noturnos'] ?? null,
@@ -168,6 +160,12 @@ class LancamentoSetorialController extends Controller
 
         if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
             abort(403, 'Não autorizado.');
+        }
+
+        if ($lancamento->atingiuLimiteRejeicoes()) {
+            return redirect()
+                ->route('lancamentos.index')
+                ->withErrors(['error' => "Este lançamento atingiu o limite de {$lancamento->contarRejeicoes()} rejeições e não pode mais ser re-submetido. Crie um novo lançamento."]);
         }
 
         $servidores = Servidor::where('setor_id', $user->setor_id)
@@ -319,6 +317,12 @@ class LancamentoSetorialController extends Controller
 
         if ($lancamento->setor_origem_id !== $user->setor_id) {
             abort(403, 'Não autorizado.');
+        }
+
+        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível conferir.']);
         }
 
         if (!$lancamento->isPendente()) {

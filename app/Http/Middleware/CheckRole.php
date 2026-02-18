@@ -14,7 +14,9 @@ class CheckRole
             return redirect('/login');
         }
 
-        if (auth()->user()->role->value !== $role) {
+        $rolesPermitidas = explode('|', $role);
+
+        if (!in_array(auth()->user()->role->value, $rolesPermitidas)) {
             abort(403, 'Acesso negado.');
         }
 

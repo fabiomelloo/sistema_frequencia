@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Competencia;
 use App\Models\LancamentoSetorial;
 use App\Models\Configuracao;
+use App\Enums\CompetenciaStatus;
 use App\Enums\LancamentoStatus;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
@@ -23,7 +24,7 @@ class CompetenciaService
         }
 
         if ($existente && $existente->estaFechada()) {
-            $existente->status = 'ABERTA';
+            $existente->status = CompetenciaStatus::ABERTA;
             $existente->data_limite = $dataLimite;
             $existente->aberta_por = Auth::id();
             $existente->fechada_por = null;
@@ -34,7 +35,7 @@ class CompetenciaService
 
         return Competencia::create([
             'referencia' => $referencia,
-            'status' => 'ABERTA',
+            'status' => CompetenciaStatus::ABERTA,
             'data_limite' => $dataLimite,
             'aberta_por' => Auth::id(),
         ]);
@@ -63,7 +64,7 @@ class CompetenciaService
             );
         }
 
-        $competencia->status = 'FECHADA';
+        $competencia->status = CompetenciaStatus::FECHADA;
         $competencia->fechada_por = Auth::id();
         $competencia->fechada_em = now();
         $competencia->save();

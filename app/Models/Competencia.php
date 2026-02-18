@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Enums\CompetenciaStatus;
 use Carbon\Carbon;
 
 class Competencia extends Model
@@ -22,6 +23,7 @@ class Competencia extends Model
     protected $casts = [
         'data_limite' => 'date',
         'fechada_em' => 'datetime',
+        'status' => CompetenciaStatus::class,
     ];
 
     // Relationships
@@ -46,12 +48,12 @@ class Competencia extends Model
     // Status helpers
     public function estaAberta(): bool
     {
-        return $this->status === 'ABERTA';
+        return $this->status === CompetenciaStatus::ABERTA;
     }
 
     public function estaFechada(): bool
     {
-        return $this->status === 'FECHADA';
+        return $this->status === CompetenciaStatus::FECHADA;
     }
 
     public function prazoExpirado(): bool
@@ -73,12 +75,12 @@ class Competencia extends Model
     // Scopes
     public function scopeAberta($query)
     {
-        return $query->where('status', 'ABERTA');
+        return $query->where('status', CompetenciaStatus::ABERTA);
     }
 
     public function scopeFechada($query)
     {
-        return $query->where('status', 'FECHADA');
+        return $query->where('status', CompetenciaStatus::FECHADA);
     }
 
     /**
@@ -87,7 +89,7 @@ class Competencia extends Model
     public static function referenciaAberta(string $referencia): bool
     {
         return self::where('referencia', $referencia)
-            ->where('status', 'ABERTA')
+            ->where('status', CompetenciaStatus::ABERTA)
             ->exists();
     }
 
@@ -112,7 +114,8 @@ class Competencia extends Model
     }
 
     /**
-     * Retorna os dias úteis do mês (segunda a sexta).
+     * Retorna os dias úteis do mês (segunda a sexta, excluindo feriados).
+     * Feriados são lidos da configuração 'feriados_YYYY' (formato: Y-m-d separados por vírgula).
      */
     public function obterDiasUteis(): int
     {
@@ -123,11 +126,16 @@ class Competencia extends Model
             return 0;
         }
 
+        // Carregar feriados do ano a partir da configuração
+        $ano = $inicio->year;
+        $feriadosStr = Configuracao::get("feriados_{$ano}", '');
+        $feriados = array_filter(array_map('trim', explode(',', $feriadosStr)));
+
         $diasUteis = 0;
         $current = $inicio->copy();
 
         while ($current->lte($fim)) {
-            if (!$current->isWeekend()) {
+            if (!$current->isWeekend() && !in_array($current->format('Y-m-d'), $feriados)) {
                 $diasUteis++;
             }
             $current->addDay();

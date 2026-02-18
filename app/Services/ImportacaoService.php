@@ -79,6 +79,11 @@ class ImportacaoService
                 continue;
             }
 
+            if (!$evento->temDireitoNoSetor($setorId)) {
+                $erros[] = "Linha {$linha}: o setor não possui direito ao evento '{$evento->descricao}'.";
+                continue;
+            }
+
             if (!preg_match('/^\d{4}-\d{2}$/', $competencia)) {
                 $erros[] = "Linha {$linha}: competência '{$competencia}' inválida (esperado YYYY-MM).";
                 continue;

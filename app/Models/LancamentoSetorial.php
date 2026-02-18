@@ -157,6 +157,26 @@ class LancamentoSetorial extends Model
         return $query->where('status', $status);
     }
 
+    /**
+     * Conta quantas vezes este lançamento foi rejeitado (via audit log).
+     */
+    public function contarRejeicoes(): int
+    {
+        return \App\Models\AuditLog::where('modelo', 'LancamentoSetorial')
+            ->where('modelo_id', $this->id)
+            ->where('acao', 'REJEITOU')
+            ->count();
+    }
+
+    /**
+     * Verifica se atingiu o limite de rejeições configurável.
+     */
+    public function atingiuLimiteRejeicoes(): bool
+    {
+        $limite = \App\Models\Configuracao::getInt('limite_rejeicoes_lancamento', 3);
+        return $this->contarRejeicoes() >= $limite;
+    }
+
     public function scopeBySetor($query, int $setorId)
     {
         return $query->where('setor_origem_id', $setorId);
@@ -257,5 +277,40 @@ class LancamentoSetorial extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Scope de filtragem reutilizável para controllers.
+     * Aceita array com chaves: competencia, status, setor_id, servidor_id, evento_id, busca
+     */
+    public function scopeFiltrar($query, array $filtros): void
+    {
+        if (!empty($filtros['competencia'])) {
+            $query->where('competencia', $filtros['competencia']);
+        }
+
+        if (!empty($filtros['status'])) {
+            $query->where('status', $filtros['status']);
+        }
+
+        if (!empty($filtros['setor_id'])) {
+            $query->where('setor_origem_id', $filtros['setor_id']);
+        }
+
+        if (!empty($filtros['servidor_id'])) {
+            $query->where('servidor_id', $filtros['servidor_id']);
+        }
+
+        if (!empty($filtros['evento_id'])) {
+            $query->where('evento_id', $filtros['evento_id']);
+        }
+
+        if (!empty($filtros['busca'])) {
+            $busca = addcslashes($filtros['busca'], '%_');
+            $query->whereHas('servidor', function ($q) use ($busca) {
+                $q->where('nome', 'like', "%{$busca}%")
+                  ->orWhere('matricula', 'like', "%{$busca}%");
+            });
+        }
     }
 }

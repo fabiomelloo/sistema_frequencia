@@ -6,6 +6,7 @@ use App\Models\LancamentoSetorial;
 use App\Models\Setor;
 use App\Models\Servidor;
 use App\Models\EventoFolha;
+use App\Models\Competencia;
 use App\Services\GeradorTxtFolhaService;
 use App\Services\AuditService;
 use App\Services\NotificacaoService;
@@ -30,28 +31,27 @@ class PainelConferenciaController extends Controller
         $query = LancamentoSetorial::where('status', $status)
             ->with(['servidor', 'evento', 'setorOrigem', 'validador']);
 
-        if ($request->filled('competencia')) {
-            $query->where('competencia', $request->competencia);
-        }
+        $filtros = array_filter($request->only(['competencia', 'evento_id', 'busca']));
         if ($request->filled('setor_id')) {
-            $query->where('setor_origem_id', $request->setor_id);
+            $filtros['setor_id'] = $request->setor_id;
         }
-        if ($request->filled('evento_id')) {
-            $query->where('evento_id', $request->evento_id);
-        }
-        if ($request->filled('busca')) {
-            $busca = addcslashes($request->busca, '%_');
-            $query->whereHas('servidor', function ($q) use ($busca) {
-                $q->where('nome', 'like', "%{$busca}%")
-                  ->orWhere('matricula', 'like', "%{$busca}%");
-            });
-        }
+
+        $query->filtrar($filtros);
 
         $lancamentos = $query->orderBy('created_at', 'asc')->paginate(15)->withQueryString();
 
+        $statsRow = LancamentoSetorial::selectRaw("
+                COUNT(CASE WHEN status = 'PENDENTE' THEN 1 END) as PENDENTE,
+                COUNT(CASE WHEN status = 'CONFERIDO_SETORIAL' THEN 1 END) as CONFERIDO_SETORIAL,
+                COUNT(CASE WHEN status = 'CONFERIDO' THEN 1 END) as CONFERIDO,
+                COUNT(CASE WHEN status = 'REJEITADO' THEN 1 END) as REJEITADO,
+                COUNT(CASE WHEN status = 'EXPORTADO' THEN 1 END) as EXPORTADO,
+                COUNT(CASE WHEN status = 'ESTORNADO' THEN 1 END) as ESTORNADO
+            ")->first();
+
         $contadores = [];
         foreach (LancamentoStatus::cases() as $s) {
-            $contadores[$s->value] = LancamentoSetorial::where('status', $s)->count();
+            $contadores[$s->value] = $statsRow->{$s->value} ?? 0;
         }
 
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
@@ -81,6 +81,12 @@ class PainelConferenciaController extends Controller
 
     public function aprovar(LancamentoSetorial $lancamento): RedirectResponse
     {
+        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível aprovar.']);
+        }
+
         if (!$lancamento->isConferidoSetorial()) {
             return redirect()
                 ->back()
@@ -107,6 +113,12 @@ class PainelConferenciaController extends Controller
 
     public function rejeitar(RejeitarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
     {
+        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível rejeitar.']);
+        }
+
         if (!$lancamento->isPendente() && !$lancamento->isConferidoSetorial()) {
             return redirect()
                 ->back()
@@ -185,20 +197,31 @@ class PainelConferenciaController extends Controller
                 ->withErrors(['error' => 'Apenas lançamentos EXPORTADOS podem ser estornados.']);
         }
 
+        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível estornar.']);
+        }
+
         $dadosAntes = $lancamento->toArray();
 
-        $lancamento->status = LancamentoStatus::ESTORNADO;
+        // Volta para PENDENTE para re-entrar no workflow de conferência
+        $lancamento->status = LancamentoStatus::PENDENTE;
         $lancamento->exportado_em = null;
+        $lancamento->id_validador = null;
+        $lancamento->validated_at = null;
+        $lancamento->conferido_setorial_por = null;
+        $lancamento->conferido_setorial_em = null;
         $lancamento->save();
 
         AuditService::registrar('ESTORNOU', 'LancamentoSetorial', $lancamento->id,
-            "Lançamento estornado (exportação revertida)",
+            "Lançamento estornado — retorna ao status PENDENTE para re-conferência",
             $dadosAntes, $lancamento->fresh()->toArray()
         );
 
         return redirect()
             ->back()
-            ->with('success', 'Lançamento estornado com sucesso! Retornará para conferência.');
+            ->with('success', 'Lançamento estornado! Retornou ao status PENDENTE para nova conferência.');
     }
 
     public function exportar(Request $request): BinaryFileResponse|RedirectResponse
@@ -237,7 +260,7 @@ class PainelConferenciaController extends Controller
 
             return redirect()
                 ->route('painel.index')
-                ->withErrors(['error' => 'Erro ao exportar: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Ocorreu um erro ao exportar os lançamentos. Tente novamente ou contacte o administrador.']);
         }
     }
 }

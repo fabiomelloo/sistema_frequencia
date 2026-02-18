@@ -23,6 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SecurityHeaders::class,
             \App\Http\Middleware\ShareNotificacoes::class,
         ]);
+
+        // Rate limiting para rotas API
+        $middleware->api(prepend: [
+            \Illuminate\Routing\Middleware\ThrottleRequests::class . ':api',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(function ($request, \Throwable $e) {

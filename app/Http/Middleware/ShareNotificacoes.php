@@ -20,9 +20,10 @@ class ShareNotificacoes
                 ->limit(10)
                 ->get();
             
-            $contadorNotificacoes = Notificacao::where('user_id', $userId)
-                ->whereNull('lida_em')
-                ->count();
+            // Usa count() da query base (1 query extra apenas se houver mais de 10)
+            $contadorNotificacoes = $notificacoesNaoLidas->count() < 10
+                ? $notificacoesNaoLidas->count()
+                : Notificacao::where('user_id', $userId)->whereNull('lida_em')->count();
 
             View::share('notificacoesNaoLidas', $notificacoesNaoLidas);
             View::share('contadorNotificacoes', $contadorNotificacoes);
