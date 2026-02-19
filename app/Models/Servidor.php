@@ -12,7 +12,11 @@ class Servidor extends Model
     protected $table = 'servidores';
     protected $fillable = [
         'matricula', 
+        'cpf',
         'nome', 
+        'cargo',
+        'vinculo',
+        'carga_horaria',
         'setor_id', 
         'origem_registro', 
         'ativo',
@@ -28,6 +32,8 @@ class Servidor extends Model
         'ativo' => 'boolean',
         'funcao_vigia' => 'boolean',
         'trabalha_noturno' => 'boolean',
+        'vinculo' => \App\Enums\VinculoServidor::class,
+        'carga_horaria' => 'integer',
     ];
 
     public function setor(): BelongsTo

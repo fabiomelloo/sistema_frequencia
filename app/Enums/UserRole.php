@@ -6,6 +6,9 @@ enum UserRole: string
 {
     case CENTRAL = 'CENTRAL';
     case SETORIAL = 'SETORIAL';
+    case ADMIN = 'ADMIN';
+    case GESTOR = 'GESTOR';
+    case AUDITOR = 'AUDITOR';
 
     /**
      * Retorna o label legível para exibição
@@ -15,6 +18,9 @@ enum UserRole: string
         return match($this) {
             self::CENTRAL => 'Central',
             self::SETORIAL => 'Setorial',
+            self::ADMIN => 'Administrador',
+            self::GESTOR => 'Gestor Setorial',
+            self::AUDITOR => 'Auditor',
         };
     }
 
@@ -26,6 +32,9 @@ enum UserRole: string
         return match($this) {
             self::CENTRAL => 'Usuário da Central com acesso ao Painel de Conferência',
             self::SETORIAL => 'Usuário Setorial com acesso aos Lançamentos',
+            self::ADMIN => 'Administrador com acesso total ao sistema',
+            self::GESTOR => 'Gestor Setorial com aprovação e gerenciamento do setor',
+            self::AUDITOR => 'Auditor com acesso somente leitura para auditoria',
         };
     }
 
@@ -54,7 +63,7 @@ enum UserRole: string
      */
     public function temAcessoPainel(): bool
     {
-        return $this === self::CENTRAL;
+        return in_array($this, [self::CENTRAL, self::ADMIN]);
     }
 
     /**
@@ -62,6 +71,30 @@ enum UserRole: string
      */
     public function podeFazerLancamentos(): bool
     {
-        return $this === self::SETORIAL;
+        return in_array($this, [self::SETORIAL, self::GESTOR]);
+    }
+
+    /**
+     * Verifica se o role pode gerenciar configurações do sistema
+     */
+    public function podeGerenciarSistema(): bool
+    {
+        return $this === self::ADMIN;
+    }
+
+    /**
+     * Verifica se o role pode aprovar lançamentos no nível setorial
+     */
+    public function podeAprovarSetorial(): bool
+    {
+        return in_array($this, [self::GESTOR, self::SETORIAL]);
+    }
+
+    /**
+     * Verifica se o role tem acesso somente leitura (auditoria)
+     */
+    public function somenteAuditoria(): bool
+    {
+        return $this === self::AUDITOR;
     }
 }

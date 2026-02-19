@@ -1,6 +1,6 @@
-<?php
+﻿<?php
 
-namespace App\Http\Controllers;
+
 
 use App\Models\LancamentoSetorial;
 use App\Models\EventoFolha;
@@ -98,7 +98,7 @@ class LancamentoSetorialController extends Controller
                     ->withErrors(['error' => "Já existe um lançamento para este servidor com este evento na competência {$competencia}."]);
             }
 
-            $regrasService->validar($servidor, $evento, $validated);
+            $regrasService->validar($servidor, $evento, $validated, null, $user->setor_id);
 
             // Usa setor histórico do servidor na competência
             $setorOrigem = $servidor->setorNaCompetencia($competencia);
@@ -158,7 +158,11 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
 
-        if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
+        // verificar setor OU delegação ativa
+        $temAcesso = $lancamento->setor_origem_id === $user->setor_id
+            || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
+
+        if (!$temAcesso || !$lancamento->podeSerEditado()) {
             abort(403, 'Não autorizado.');
         }
 
@@ -194,8 +198,19 @@ class LancamentoSetorialController extends Controller
         try {
             $user = auth()->user();
 
-            if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
+            // verificar setor OU delegação ativa
+            $temAcesso = $lancamento->setor_origem_id === $user->setor_id
+                || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
+
+            if (!$temAcesso || !$lancamento->podeSerEditado()) {
                 abort(403, 'Não autorizado.');
+            }
+
+            // Limite de rejeições
+            if ($lancamento->isRejeitado() && $lancamento->atingiuLimiteRejeicoes()) {
+                return redirect()
+                    ->back()
+                    ->withErrors(['error' => "Este lançamento atingiu o limite de rejeições e não pode mais ser re-submetido. Crie um novo lançamento."]);
             }
 
             $validated = $request->validated();
@@ -212,7 +227,7 @@ class LancamentoSetorialController extends Controller
                     ->withErrors(['error' => "Já existe um lançamento para este servidor com este evento na competência {$competencia}."]);
             }
 
-            $regrasService->validar($servidor, $evento, $validated, $lancamento->id);
+            $regrasService->validar($servidor, $evento, $validated, $lancamento->id, $user->setor_id);
 
             $lancamento->update([
                 'servidor_id' => $validated['servidor_id'],
@@ -258,7 +273,11 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
 
-        if ($lancamento->setor_origem_id !== $user->setor_id || !$lancamento->podeSerEditado()) {
+        // verificar setor OU delegação ativa
+        $temAcesso = $lancamento->setor_origem_id === $user->setor_id
+            || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
+
+        if (!$temAcesso || !$lancamento->podeSerEditado()) {
             abort(403, 'Não autorizado.');
         }
 
@@ -300,6 +319,13 @@ class LancamentoSetorialController extends Controller
             abort(403, 'Não autorizado.');
         }
 
+        // re-validar competência antes de restaurar
+        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+            return redirect()
+                ->route('lancamentos.lixeira')
+                ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível restaurar.']);
+        }
+
         $lancamento->restore();
 
         AuditService::registrar('RESTAUROU', 'LancamentoSetorial', $lancamento->id,
@@ -325,10 +351,22 @@ class LancamentoSetorialController extends Controller
                 ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível conferir.']);
         }
 
-        if (!$lancamento->isPendente()) {
+        // impedir auto-aprovação (quem criou não pode conferir)
+        $criadorId = \App\Models\AuditLog::where('entidade_tipo', 'LancamentoSetorial')
+            ->where('entidade_id', $lancamento->id)
+            ->where('acao', 'CRIOU')
+            ->value('user_id');
+        if ($criadorId && $criadorId === $user->id) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Apenas lançamentos PENDENTES podem ser conferidos pelo setor.']);
+                ->withErrors(['error' => 'Você não pode conferir um lançamento que você mesmo criou. Peça a outro usuário do setor.']);
+        }
+
+        // Aceita PENDENTE e ESTORNADO para conferência setorial
+        if (!$lancamento->isPendente() && !$lancamento->isEstornado()) {
+            return redirect()
+                ->back()
+                ->withErrors(['error' => 'Apenas lançamentos PENDENTES ou ESTORNADOS podem ser conferidos pelo setor.']);
         }
 
         $lancamento->status = LancamentoStatus::CONFERIDO_SETORIAL;
@@ -369,3 +407,4 @@ class LancamentoSetorialController extends Controller
             ->with('success', "{$aprovados} lançamento(s) conferido(s) pelo setor!");
     }
 }
+

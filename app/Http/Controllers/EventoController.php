@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\EventoFolha;
 use App\Models\Setor;
+use App\Services\AuditService;
 
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -13,7 +14,7 @@ class EventoController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware('role:CENTRAL');
+        $this->middleware('role:CENTRAL,ADMIN');
     }
 
     public function index(): View
@@ -32,7 +33,12 @@ class EventoController extends Controller
 
     public function store(\App\Http\Requests\StoreEventoRequest $request): RedirectResponse
     {
-        EventoFolha::create($request->validated());
+        $evento = EventoFolha::create($request->validated());
+
+        AuditService::criou('EventoFolha', $evento->id, 
+            "Evento criado: {$evento->codigo_evento} — {$evento->descricao}",
+            $evento->toArray()
+        );
 
         return redirect()
             ->route('admin.eventos.index')
@@ -57,7 +63,12 @@ class EventoController extends Controller
 
     public function update(\App\Http\Requests\UpdateEventoRequest $request, EventoFolha $evento): RedirectResponse
     {
+        $antes = $evento->toArray();
         $evento->update($request->validated());
+
+        AuditService::editouComDiff('EventoFolha', $evento->id, $antes, $evento->fresh()->toArray(),
+            "Evento atualizado: {$evento->codigo_evento}"
+        );
 
         return redirect()
             ->route('admin.eventos.index')
@@ -72,8 +83,14 @@ class EventoController extends Controller
                 ->with('error', 'Não é possível deletar um evento que possui lançamentos vinculados.');
         }
 
+        $dadosEvento = $evento->toArray();
         $evento->setoresComDireito()->detach();
         $evento->delete();
+
+        AuditService::excluiu('EventoFolha', $dadosEvento['id'],
+            "Evento excluído: {$dadosEvento['codigo_evento']} — {$dadosEvento['descricao']}",
+            $dadosEvento
+        );
 
         return redirect()
             ->route('admin.eventos.index')

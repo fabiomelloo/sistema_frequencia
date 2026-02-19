@@ -1,6 +1,6 @@
-<?php
+﻿<?php
 
-namespace App\Services;
+
 
 use App\Models\Servidor;
 use App\Models\EventoFolha;
@@ -16,9 +16,18 @@ class RegrasLancamentoService
         Servidor $servidor,
         EventoFolha $evento,
         array $dados,
-        ?int $lancamentoId = null
+        ?int $lancamentoId = null,
+        ?int $setorId = null
     ): void {
         $competencia = $dados['competencia'] ?? now()->format('Y-m');
+
+        // 0a. Evento deve estar ativo
+        $this->validarEventoAtivo($evento);
+
+        // 0b. Evento autorizado para o setor
+        if ($setorId) {
+            $this->validarAutorizacaoEvento($evento, $setorId);
+        }
 
         // 1. Competência aberta
         $this->validarCompetenciaAberta($competencia);
@@ -26,8 +35,8 @@ class RegrasLancamentoService
         // 2. Servidor ativo na competência
         $this->validarServidorAtivo($servidor, $competencia);
 
-        // 3. Dias individuais
-        $this->validarDias($evento, $dados, $competencia);
+        // 3. Dias individuais (com proporcionalidade)
+        $this->validarDias($evento, $dados, $competencia, $servidor);
 
         // 4. Limite de dias acumulados por servidor/competência
         $this->validarLimiteDias($servidor, $competencia, $dados, $lancamentoId);
@@ -55,6 +64,38 @@ class RegrasLancamentoService
 
         // 12. Limite de valor total acumulado por servidor na competência
         $this->validarValorTotalServidor($servidor, $competencia, $dados, $lancamentoId);
+
+        // 13. Retroatividade máxima
+        $this->validarRetroatividade($competencia);
+
+        // 14. Conflito turno/noturno
+        $this->validarConflitoTurnoNoturno($dados);
+    }
+
+    /**
+     * Evento deve estar ativo para receber lançamentos.
+     */
+    private function validarEventoAtivo(EventoFolha $evento): void
+    {
+        if (!$evento->ativo) {
+            throw new InvalidArgumentException(
+                "O evento \"{$evento->descricao}\" (código {$evento->codigo_evento}) está inativo. " .
+                "Não é possível criar lançamentos para eventos desativados."
+            );
+        }
+    }
+
+    /**
+     * Evento deve ser autorizado para o setor que está lançando.
+     */
+    private function validarAutorizacaoEvento(EventoFolha $evento, int $setorId): void
+    {
+        if (!$evento->temDireitoNoSetor($setorId)) {
+            throw new InvalidArgumentException(
+                "O evento \"{$evento->descricao}\" não está autorizado para este setor. " .
+                "Solicite a liberação ao administrador."
+            );
+        }
     }
 
     private function validarCompetenciaAberta(string $competencia): void
@@ -92,7 +133,7 @@ class RegrasLancamentoService
         }
     }
 
-    private function validarDias(EventoFolha $evento, array $dados, string $competencia): void
+    private function validarDias(EventoFolha $evento, array $dados, string $competencia, ?Servidor $servidor = null): void
     {
         $diasTrabalhados = $dados['dias_trabalhados'] ?? null;
 
@@ -102,14 +143,37 @@ class RegrasLancamentoService
 
         if (!empty($diasTrabalhados)) {
             $diasNoMes = Carbon::createFromFormat('Y-m', $competencia)->daysInMonth;
-            
+            $diasMaximosPermitidos = $diasNoMes;
+
+            // Dias proporcionais por admissão no meio do mês
+            if ($servidor && $servidor->data_admissao) {
+                $inicioMes = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
+                $fimMes = Carbon::createFromFormat('Y-m', $competencia)->endOfMonth();
+                if ($servidor->data_admissao->gt($inicioMes) && $servidor->data_admissao->lte($fimMes)) {
+                    $diasMaximosPermitidos = $fimMes->diffInDays($servidor->data_admissao) + 1;
+                }
+            }
+
+            // Dias proporcionais por desligamento no meio do mês
+            if ($servidor && $servidor->data_desligamento) {
+                $inicioMes = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
+                $fimMes = Carbon::createFromFormat('Y-m', $competencia)->endOfMonth();
+                if ($servidor->data_desligamento->gte($inicioMes) && $servidor->data_desligamento->lt($fimMes)) {
+                    $diasAteDesligamento = $servidor->data_desligamento->diffInDays($inicioMes) + 1;
+                    $diasMaximosPermitidos = min($diasMaximosPermitidos, $diasAteDesligamento);
+                }
+            }
+
             if ($diasTrabalhados < 1) {
                 throw new InvalidArgumentException('Dias trabalhados deve ser pelo menos 1.');
             }
 
-            if ($diasTrabalhados > $diasNoMes) {
+            if ($diasTrabalhados > $diasMaximosPermitidos) {
+                $msgExtra = $diasMaximosPermitidos < $diasNoMes
+                    ? " (proporcional — servidor ativo apenas {$diasMaximosPermitidos} dias neste mês)"
+                    : '';
                 throw new InvalidArgumentException(
-                    "Dias trabalhados não pode ser maior que os dias do mês ({$diasNoMes})."
+                    "Dias trabalhados ({$diasTrabalhados}) excede o máximo permitido ({$diasMaximosPermitidos}){$msgExtra}."
                 );
             }
 
@@ -267,7 +331,7 @@ class RegrasLancamentoService
         if (!empty($adicionalNoturno)) {
             if (!$servidor->trabalha_noturno) {
                 throw new InvalidArgumentException(
-                    'Adicional noturno permitido apenas para servidor que trabalha à noite.'
+                    'Adicional noturno permitido apenas para servidor que trabalha È  noite.'
                 );
             }
 
@@ -349,4 +413,39 @@ class RegrasLancamentoService
             );
         }
     }
+
+    /**
+     * Regra #14: Limite de retroatividade.
+     * Lançamentos só podem ser feitos para até 3 meses retroativos.
+     */
+    private function validarRetroatividade(string $competencia): void
+    {
+        $limiteRetroativo = (int) (\App\Models\Configuracao::get('meses_retroativos') ?? 3);
+        $competenciaDate = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
+        $limiteDate = now()->subMonths($limiteRetroativo)->startOfMonth();
+
+        if ($competenciaDate->lt($limiteDate)) {
+            throw new InvalidArgumentException(
+                "A competência {$competencia} é anterior ao limite retroativo de {$limiteRetroativo} meses. " .
+                "Mês mais antigo permitido: {$limiteDate->format('Y-m')}."
+            );
+        }
+    }
+
+    /**
+     * Regra #15: Conflito entre adicional de turno e adicional noturno no mesmo lançamento.
+     */
+    private function validarConflitoTurnoNoturno(array $dados): void
+    {
+        $adicionalTurno = $dados['adicional_turno'] ?? null;
+        $adicionalNoturno = $dados['adicional_noturno'] ?? null;
+
+        if (!empty($adicionalTurno) && !empty($adicionalNoturno)) {
+            throw new InvalidArgumentException(
+                'Adicional de turno e adicional noturno não podem coexistir no mesmo lançamento. ' .
+                'Crie lançamentos separados para cada adicional.'
+            );
+        }
+    }
 }
+

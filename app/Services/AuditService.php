@@ -75,4 +75,51 @@ class AuditService
     {
         return self::registrar('LOGOUT', 'User', Auth::id(), $descricao);
     }
+
+    public static function estornou(string $modelo, int $id, ?string $descricao = null, ?array $dados = null): AuditLog
+    {
+        return self::registrar('ESTORNOU', $modelo, $id, $descricao, $dados, null);
+    }
+
+    /**
+     * Registra edição com diff estruturado campo-a-campo.
+     * O resultado em dados_antes/dados_depois contém apenas os campos alterados.
+     */
+    public static function editouComDiff(string $modelo, int $id, array $antes, array $depois, ?string $descricao = null): AuditLog
+    {
+        $camposIgnorados = ['updated_at', 'created_at', 'deleted_at'];
+        $diff = self::calcularDiff($antes, $depois, $camposIgnorados);
+
+        if (empty($diff['antes']) && empty($diff['depois'])) {
+            // Nenhuma alteração real — registra mesmo assim para auditoria
+            return self::registrar('EDITOU', $modelo, $id, $descricao ?? 'Sem alterações detectadas', $antes, $depois);
+        }
+
+        $camposAlterados = array_keys($diff['antes']);
+        $descFinal = $descricao ?? 'Campos alterados: ' . implode(', ', $camposAlterados);
+
+        return self::registrar('EDITOU', $modelo, $id, $descFinal, $diff['antes'], $diff['depois']);
+    }
+
+    /**
+     * Calcula diferenças campo-a-campo entre dois arrays.
+     */
+    private static function calcularDiff(array $antes, array $depois, array $ignorar = []): array
+    {
+        $diffAntes = [];
+        $diffDepois = [];
+
+        foreach ($depois as $campo => $valorNovo) {
+            if (in_array($campo, $ignorar)) {
+                continue;
+            }
+            $valorAntigo = $antes[$campo] ?? null;
+            if ($valorNovo != $valorAntigo) { // comparação loose para lidar com tipos
+                $diffAntes[$campo] = $valorAntigo;
+                $diffDepois[$campo] = $valorNovo;
+            }
+        }
+
+        return ['antes' => $diffAntes, 'depois' => $diffDepois];
+    }
 }

@@ -24,6 +24,19 @@ class CompetenciaService
         }
 
         if ($existente && $existente->estaFechada()) {
+            // Regra #13: alertar se existem lançamentos exportados
+            $exportados = LancamentoSetorial::where('competencia', $referencia)
+                ->where('status', LancamentoStatus::EXPORTADO->value)
+                ->count();
+
+            if ($exportados > 0) {
+                throw new \InvalidArgumentException(
+                    "A competência {$referencia} possui {$exportados} lançamento(s) já exportado(s). " .
+                    "Reabrir pode causar inconsistências com a folha de pagamento. " .
+                    "Estorne os lançamentos exportados antes de reabrir."
+                );
+            }
+
             $existente->status = CompetenciaStatus::ABERTA;
             $existente->data_limite = $dataLimite;
             $existente->aberta_por = Auth::id();
@@ -61,6 +74,18 @@ class CompetenciaService
             throw new \InvalidArgumentException(
                 "Não é possível fechar a competência {$competencia->referencia}. " .
                 "Existem {$pendentes} lançamento(s) pendente(s) de conferência."
+            );
+        }
+
+        $estornados = LancamentoSetorial::where('competencia', $competencia->referencia)
+            ->where('status', LancamentoStatus::ESTORNADO->value)
+            ->count();
+
+        if ($estornados > 0) {
+            throw new \InvalidArgumentException(
+                "Não é possível fechar a competência {$competencia->referencia}. " .
+                "Existem {$estornados} lançamento(s) estornado(s) aguardando reprocessamento. " .
+                "Resolva os estornos antes de fechar."
             );
         }
 

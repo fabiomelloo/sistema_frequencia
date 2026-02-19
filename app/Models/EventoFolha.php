@@ -26,6 +26,14 @@ class EventoFolha extends Model
 
     protected $casts = [
         'tipo_evento' => TipoEvento::class,
+        'exige_dias' => 'boolean',
+        'exige_valor' => 'boolean',
+        'exige_observacao' => 'boolean',
+        'exige_porcentagem' => 'boolean',
+        'ativo' => 'boolean',
+        'valor_minimo' => 'decimal:2',
+        'valor_maximo' => 'decimal:2',
+        'dias_maximo' => 'integer',
     ];
 
     public function setoresComDireito(): BelongsToMany

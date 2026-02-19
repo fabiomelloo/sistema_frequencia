@@ -57,6 +57,31 @@ class DelegacaoController extends Controller
             return redirect()->back()->withErrors(['error' => 'Já existe uma delegação ativa para este usuário.']);
         }
 
+        // Limite de delegações ativas por setor
+        $limiteDelegacoes = (int) (\App\Models\Configuracao::get('limite_delegacoes_setor') ?? 3);
+        $ativasNoSetor = Delegacao::where('setor_id', $user->setor_id)
+            ->where('ativa', true)
+            ->where('data_fim', '>=', now())
+            ->count();
+
+        if ($ativasNoSetor >= $limiteDelegacoes) {
+            return redirect()->back()->withErrors([
+                'error' => "Limite de {$limiteDelegacoes} delegações ativas por setor atingido. Revogue uma delegação existente antes de criar outra."
+            ]);
+        }
+
+        // Limite de duração máxima (90 dias)
+        $duracaoMaxima = (int) (\App\Models\Configuracao::get('duracao_maxima_delegacao_dias') ?? 90);
+        $inicio = \Carbon\Carbon::parse($validated['data_inicio']);
+        $fim = \Carbon\Carbon::parse($validated['data_fim']);
+        $duracaoDias = $inicio->diffInDays($fim);
+
+        if ($duracaoDias > $duracaoMaxima) {
+            return redirect()->back()->withErrors([
+                'error' => "A delegação não pode exceder {$duracaoMaxima} dias. Duração informada: {$duracaoDias} dias."
+            ]);
+        }
+
         $delegacao = Delegacao::create([
             'delegante_id' => $user->id,
             'delegado_id' => $delegadoId,

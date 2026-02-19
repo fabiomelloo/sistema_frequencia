@@ -210,7 +210,10 @@ class LancamentoSetorial extends Model
         $query = self::where('servidor_id', $servidorId)
             ->where('evento_id', $eventoId)
             ->where('competencia', $competencia)
-            ->whereNotIn('status', [\App\Enums\LancamentoStatus::REJEITADO->value]);
+            ->whereNotIn('status', [
+            \App\Enums\LancamentoStatus::REJEITADO->value,
+            \App\Enums\LancamentoStatus::ESTORNADO->value,
+        ]);
 
         if ($ignorarId) {
             $query->where('id', '!=', $ignorarId);
