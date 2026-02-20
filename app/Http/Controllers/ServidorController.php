@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Servidor;
 use App\Models\Setor;
-
+use App\Services\ServidorCicloVidaService;
+use App\Services\AuditService;
+use App\Http\Requests\TransferirServidorRequest;
+use App\Http\Requests\DesligarServidorRequest;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use Carbon\Carbon;
 
 class ServidorController extends Controller
 {
@@ -83,8 +87,138 @@ class ServidorController extends Controller
 
         $servidor->delete();
 
+        AuditService::excluiu('Servidor', $servidor->id, "Servidor excluído: {$servidor->nome}");
+
         return redirect()
             ->route('admin.servidores.index')
             ->with('success', 'Servidor deletado com sucesso!');
+    }
+
+    /**
+     * Ativa um servidor previamente desativado.
+     */
+    public function ativar(Servidor $servidor): RedirectResponse
+    {
+        $servidor->ativo = true;
+        $servidor->data_desligamento = null;
+        $servidor->save();
+
+        AuditService::registrar(
+            'ATIVOU_SERVIDOR',
+            'Servidor',
+            $servidor->id,
+            "Servidor reativado: {$servidor->nome}"
+        );
+
+        return redirect()
+            ->route('admin.servidores.show', $servidor)
+            ->with('success', 'Servidor reativado com sucesso!');
+    }
+
+    /**
+     * Exibe formulário de transferência de servidor.
+     */
+    public function formTransferir(Servidor $servidor): View
+    {
+        $setores = Setor::where('ativo', true)
+            ->where('id', '!=', $servidor->setor_id)
+            ->orderBy('nome')
+            ->get();
+
+        return view('admin.servidores.transferir', [
+            'servidor' => $servidor,
+            'setores' => $setores,
+        ]);
+    }
+
+    /**
+     * Processa transferência de servidor entre setores.
+     */
+    public function transferir(
+        TransferirServidorRequest $request,
+        Servidor $servidor,
+        ServidorCicloVidaService $service
+    ): RedirectResponse {
+        try {
+            $validated = $request->validated();
+            
+            $resultado = $service->transferirServidor(
+                $servidor,
+                $validated['novo_setor_id'],
+                Carbon::parse($validated['data_transferencia']),
+                $validated['motivo'] ?? null
+            );
+
+            $mensagem = "Servidor transferido com sucesso! ";
+            $mensagem .= "{$resultado['lancamentos_afetados']} lançamento(s) pendente(s) ";
+            $mensagem .= $resultado['acao'] === 'transferidos' 
+                ? "foram transferidos para o novo setor."
+                : "permanecem no setor de origem.";
+
+            return redirect()
+                ->route('admin.servidores.show', $servidor)
+                ->with('success', $mensagem);
+
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Exibe formulário de desligamento de servidor.
+     */
+    public function formDesligar(Servidor $servidor): View
+    {
+        // Buscar lançamentos que serão afetados
+        $competenciaAtual = now()->format('Y-m');
+        $lancamentosAfetados = \App\Models\LancamentoSetorial::where('servidor_id', $servidor->id)
+            ->whereIn('status', [
+                \App\Enums\LancamentoStatus::PENDENTE,
+                \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL,
+                \App\Enums\LancamentoStatus::REJEITADO,
+            ])
+            ->where('competencia', '>=', $competenciaAtual)
+            ->count();
+
+        return view('admin.servidores.desligar', [
+            'servidor' => $servidor,
+            'lancamentos_afetados' => $lancamentosAfetados,
+        ]);
+    }
+
+    /**
+     * Processa desligamento de servidor.
+     */
+    public function desligar(
+        DesligarServidorRequest $request,
+        Servidor $servidor,
+        ServidorCicloVidaService $service
+    ): RedirectResponse {
+        try {
+            $validated = $request->validated();
+            
+            $resultado = $service->desligarServidor(
+                $servidor,
+                Carbon::parse($validated['data_desligamento']),
+                $request->getMotivoFinal()
+            );
+
+            $mensagem = "Servidor desligado com sucesso! ";
+            $mensagem .= "{$resultado['lancamentos_cancelados']} lançamento(s) cancelado(s). ";
+            $mensagem .= "{$resultado['setores_notificados']} setor(es) notificado(s).";
+
+            return redirect()
+                ->route('admin.servidores.show', $servidor)
+                ->with('success', $mensagem);
+
+        } catch (\Exception $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->withErrors(['error' => $e->getMessage()]);
+        }
     }
 }

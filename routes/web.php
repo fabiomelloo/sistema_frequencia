@@ -112,6 +112,10 @@ Route::middleware(['auth'])->group(function () {
             Route::patch('permissoes/{setor}/{evento}/toggle', [PermissaoController::class, 'toggle'])->name('permissoes.toggle');
             Route::delete('servidores/{servidor}/desativar', [ServidorController::class, 'destroy'])->name('servidores.destroy');
             Route::post('servidores/{servidor}/ativar', [ServidorController::class, 'ativar'])->name('servidores.ativar');
+            Route::get('servidores/{servidor}/transferir', [ServidorController::class, 'formTransferir'])->name('servidores.transferir.form');
+            Route::post('servidores/{servidor}/transferir', [ServidorController::class, 'transferir'])->name('servidores.transferir');
+            Route::get('servidores/{servidor}/desligar', [ServidorController::class, 'formDesligar'])->name('servidores.desligar.form');
+            Route::post('servidores/{servidor}/desligar', [ServidorController::class, 'desligar'])->name('servidores.desligar');
 
             // ===== AUDITORIA =====
             Route::get('audit', [AuditLogController::class, 'index'])->name('audit.index');

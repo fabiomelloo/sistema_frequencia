@@ -9,10 +9,27 @@
             <h1><i class="bi bi-person-badge"></i> {{ $servidor->nome }}</h1>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{{ route('admin.servidores.edit', $servidor) }}" class="btn btn-warning">
-                <i class="bi bi-pencil"></i> Editar
-            </a>
-            <a href="{{ route('admin.servidores.index') }}" class="btn btn-secondary">
+            <div class="btn-group" role="group">
+                <a href="{{ route('admin.servidores.edit', $servidor) }}" class="btn btn-warning">
+                    <i class="bi bi-pencil"></i> Editar
+                </a>
+                @if ($servidor->ativo)
+                    <a href="{{ route('admin.servidores.transferir.form', $servidor) }}" class="btn btn-info">
+                        <i class="bi bi-arrow-left-right"></i> Transferir
+                    </a>
+                    <a href="{{ route('admin.servidores.desligar.form', $servidor) }}" class="btn btn-danger">
+                        <i class="bi bi-person-x"></i> Desligar
+                    </a>
+                @else
+                    <form action="{{ route('admin.servidores.ativar', $servidor) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-success" onclick="return confirm('Deseja reativar este servidor?')">
+                            <i class="bi bi-check-circle"></i> Reativar
+                        </button>
+                    </form>
+                @endif
+            </div>
+            <a href="{{ route('admin.servidores.index') }}" class="btn btn-secondary ms-2">
                 <i class="bi bi-arrow-left"></i> Voltar
             </a>
         </div>
@@ -26,6 +43,7 @@
                 </div>
                 <div class="card-body">
                     <p><strong>Matrícula:</strong> {{ $servidor->matricula }}</p>
+                    <p><strong>CPF:</strong> {{ $servidor->cpf_formatado }}</p>
                     <p><strong>Nome:</strong> {{ $servidor->nome }}</p>
                     <p><strong>Setor:</strong> {{ $servidor->setor->nome ?? 'N/A' }}</p>
                     <p><strong>Origem:</strong> {{ $servidor->origem_registro ?? 'N/A' }}</p>

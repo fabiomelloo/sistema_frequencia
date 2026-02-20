@@ -1,7 +1,8 @@
-﻿<?php
+<?php
 
+namespace App\Http\Controllers;
 
-
+use App\Http\Controllers\Controller;
 use App\Models\LancamentoSetorial;
 use App\Models\Setor;
 use App\Models\Servidor;

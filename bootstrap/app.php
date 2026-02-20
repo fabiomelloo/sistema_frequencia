@@ -18,10 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
         
         $middleware->redirectGuestsTo(fn () => route('login'));
 
-        // Middleware global: security headers + notificações compartilhadas
+        // Middleware global: security headers + notificações compartilhadas + auditoria de leitura
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeaders::class,
             \App\Http\Middleware\ShareNotificacoes::class,
+            \App\Http\Middleware\AuditReadMiddleware::class,
         ]);
 
         // Rate limiting para rotas API

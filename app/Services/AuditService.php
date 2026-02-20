@@ -82,6 +82,14 @@ class AuditService
     }
 
     /**
+     * Registra acesso de leitura (auditoria LGPD).
+     */
+    public static function leu(string $modelo, ?int $id = null, ?string $descricao = null): AuditLog
+    {
+        return self::registrar('LEU', $modelo, $id, $descricao);
+    }
+
+    /**
      * Registra edição com diff estruturado campo-a-campo.
      * O resultado em dados_antes/dados_depois contém apenas os campos alterados.
      */

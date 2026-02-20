@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\MaskedCpf;
 use Carbon\Carbon;
 
 class Servidor extends Model
 {
+    use MaskedCpf;
     protected $table = 'servidores';
     protected $fillable = [
         'matricula', 
@@ -35,6 +37,19 @@ class Servidor extends Model
         'vinculo' => \App\Enums\VinculoServidor::class,
         'carga_horaria' => 'integer',
     ];
+
+    /**
+     * Mutator para limpar CPF antes de salvar (remove formatação).
+     */
+    public function setCpfAttribute($value): void
+    {
+        if ($value) {
+            // Remove caracteres não numéricos
+            $this->attributes['cpf'] = preg_replace('/\D/', '', $value);
+        } else {
+            $this->attributes['cpf'] = null;
+        }
+    }
 
     public function setor(): BelongsTo
     {

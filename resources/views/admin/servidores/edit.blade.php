@@ -26,6 +26,27 @@
                 </div>
 
                 <div class="mb-3">
+                    <label for="cpf" class="form-label">CPF</label>
+                    <input type="text" 
+                           class="form-control @error('cpf') is-invalid @enderror" 
+                           id="cpf" 
+                           name="cpf" 
+                           value="{{ old('cpf', $servidor->cpf) }}" 
+                           placeholder="000.000.000-00"
+                           maxlength="14">
+                    @error('cpf')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    <small class="form-text text-muted">
+                        @if ($servidor->cpf)
+                            CPF atual: {{ $servidor->cpf_formatado }}
+                        @else
+                            Digite apenas números (11 dígitos)
+                        @endif
+                    </small>
+                </div>
+
+                <div class="mb-3">
                     <label for="nome" class="form-label">Nome</label>
                     <input type="text" class="form-control @error('nome') is-invalid @enderror" 
                            id="nome" name="nome" value="{{ old('nome', $servidor->nome) }}" required>
