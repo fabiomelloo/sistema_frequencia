@@ -52,13 +52,13 @@
                         <tr>
                             <td class="ps-4 fw-bold">{{ $competencia->descricao }}</td>
                             <td>
-                                @if($competencia->status === 'ABERTA')
+                                @if($competencia->status === \App\Enums\CompetenciaStatus::ABERTA)
                                     <span class="badge bg-success">ABERTA</span>
                                 @else
                                     <span class="badge bg-secondary">FECHADA</span>
                                 @endif
                             </td>
-                            <td>{{ $competencia->obterDiasUteis() }} dias</td>
+                            <td>{{ \App\Models\Competencia::obterDiasUteis($competencia->referencia) }} dias</td>
                             <td>{{ $competencia->data_limite->format('d/m/Y') }}</td>
                             <td>
                                 <div class="d-flex align-items-center">
@@ -69,7 +69,7 @@
                                 </div>
                             </td>
                             <td class="text-end pe-4">
-                                @if($competencia->status === 'ABERTA')
+                                @if($competencia->status === \App\Enums\CompetenciaStatus::ABERTA)
                                     <form action="{{ route('admin.competencias.fechar', $competencia->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja fechar esta competência? Novos lançamentos serão bloqueados.');">
                                         @csrf
                                         <button type="submit" class="btn btn-sm btn-outline-danger">

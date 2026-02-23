@@ -75,6 +75,8 @@ Route::middleware(['auth'])->group(function () {
             Route::put('/{lancamento}', [LancamentoSetorialController::class, 'update'])->name('update');
             Route::delete('/{lancamento}', [LancamentoSetorialController::class, 'destroy'])->name('destroy');
             Route::post('/{lancamento}/aprovar-setorial', [LancamentoSetorialController::class, 'aprovarSetorial'])->name('aprovar-setorial');
+            Route::post('/{lancamento}/cancelar', [LancamentoSetorialController::class, 'cancelar'])->name('cancelar');
+            Route::post('/{lancamento}/solicitar-estorno', [LancamentoSetorialController::class, 'solicitarEstorno'])->name('solicitar-estorno');
 
 
         });
@@ -135,6 +137,12 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/comparativo', [RelatorioController::class, 'comparativo'])->name('comparativo');
                 Route::get('/folha-espelho', [RelatorioController::class, 'folhaEspelho'])->name('folha-espelho');
                 Route::get('/exportar-csv', [RelatorioController::class, 'exportarCsv'])->name('exportar-csv');
+            });
+
+            // ===== CONFIGURAÇÕES =====
+            Route::prefix('configuracoes')->name('configuracoes.')->group(function () {
+                Route::get('/', [App\Http\Controllers\ConfiguracaoController::class, 'index'])->name('index');
+                Route::put('/', [App\Http\Controllers\ConfiguracaoController::class, 'update'])->name('update');
             });
         });
     });

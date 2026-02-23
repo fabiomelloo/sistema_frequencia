@@ -21,23 +21,28 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root {
-            --primary-gradient: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
-            --accent-color: #0d6efd;
-            --success-color: #198754;
-            --danger-color: #dc3545;
-            --warning-color: #ffc107;
-            --bg-color: #f0f2f5;
-            --card-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --accent-color: #3b82f6;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --bg-color: #f8fafc;
+            --text-main: #334155;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+            --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         body {
             background-color: var(--bg-color);
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9rem;
+            font-family: 'Outfit', sans-serif;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            -webkit-font-smoothing: antialiased;
         }
         .navbar {
             background: var(--primary-gradient) !important;
@@ -46,22 +51,31 @@
         }
         .navbar-brand {
             font-weight: 700;
-            font-size: 1.15rem;
-            letter-spacing: -0.3px;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
         }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .main-content {
-            padding-top: 24px;
-            padding-bottom: 40px;
+            padding-top: 32px;
+            padding-bottom: 48px;
             min-height: calc(100vh - 140px);
+            animation: fadeIn 0.4s ease-out forwards;
         }
         .card {
-            border: none;
-            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.04);
+            border-radius: 16px;
             box-shadow: var(--card-shadow);
-            transition: box-shadow 0.2s ease;
+            transition: var(--transition-smooth);
+            background: #ffffff;
         }
         .card:hover {
-            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+            box-shadow: var(--card-shadow-hover);
+            transform: translateY(-2px);
         }
         .table th {
             font-weight: 600;
@@ -76,9 +90,21 @@
             border-radius: 6px;
         }
         .btn {
-            border-radius: 8px;
+            border-radius: 10px;
             font-weight: 500;
-            transition: all 0.2s;
+            transition: var(--transition-smooth);
+            padding: 0.5rem 1rem;
+            letter-spacing: 0.2px;
+        }
+        .btn-primary {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+            border-color: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
         .btn:hover {
             transform: translateY(-1px);
@@ -222,6 +248,7 @@
                                     <li><a class="dropdown-item" href="{{ route('admin.permissoes.index') }}"><i class="bi bi-shield-check me-2"></i>Permissões</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" href="{{ route('admin.audit.index') }}"><i class="bi bi-journal-text me-2"></i>Auditoria</a></li>
+                                    <li><a class="dropdown-item" href="{{ route('admin.configuracoes.index') }}"><i class="bi bi-gear me-2"></i>Configurações</a></li>
                                 </ul>
                             </li>
                         @endif

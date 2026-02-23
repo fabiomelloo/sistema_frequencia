@@ -39,28 +39,28 @@
         <div class="d-flex flex-wrap gap-2 align-items-center">
             <span class="text-muted fw-semibold me-2" style="font-size:0.85rem">Status:</span>
             
-            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO_SETORIAL'])) }}" class="btn btn-sm {{ $statusAtual === 'CONFERIDO_SETORIAL' ? 'btn-info text-white' : 'btn-outline-info' }}">
-                <i class="bi bi-check2-circle me-1"></i>Conf. Setorial <span class="badge bg-white text-dark ms-1">{{ $contadores['CONFERIDO_SETORIAL'] ?? 0 }}</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO_SETORIAL'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'CONFERIDO_SETORIAL' ? 'btn-info text-white shadow-sm' : 'btn-outline-info' }}">
+                <i class="bi bi-check2-circle me-1"></i>Conf. Setorial <span class="badge bg-white text-dark ms-1 rounded-circle">{{ $contadores['CONFERIDO_SETORIAL'] ?? 0 }}</span>
             </a>
 
-            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'PENDENTE'])) }}" class="btn btn-sm {{ $statusAtual === 'PENDENTE' ? 'btn-warning' : 'btn-outline-warning' }}">
-                <i class="bi bi-hourglass-split me-1"></i>Pendentes <span class="badge bg-dark ms-1">{{ $contadores['PENDENTE'] ?? 0 }}</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'PENDENTE'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'PENDENTE' ? 'btn-warning shadow-sm' : 'btn-outline-warning' }}">
+                <i class="bi bi-hourglass-split me-1"></i>Pendentes <span class="badge bg-dark ms-1 rounded-circle">{{ $contadores['PENDENTE'] ?? 0 }}</span>
             </a>
             
-            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO'])) }}" class="btn btn-sm {{ $statusAtual === 'CONFERIDO' ? 'btn-success' : 'btn-outline-success' }}">
-                <i class="bi bi-check-circle me-1"></i>Conferidos <span class="badge bg-dark ms-1">{{ $contadores['CONFERIDO'] ?? 0 }}</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'CONFERIDO'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'CONFERIDO' ? 'btn-success shadow-sm' : 'btn-outline-success' }}">
+                <i class="bi bi-check-circle me-1"></i>Conferidos <span class="badge bg-dark ms-1 rounded-circle">{{ $contadores['CONFERIDO'] ?? 0 }}</span>
             </a>
             
-            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'REJEITADO'])) }}" class="btn btn-sm {{ $statusAtual === 'REJEITADO' ? 'btn-danger' : 'btn-outline-danger' }}">
-                <i class="bi bi-x-circle me-1"></i>Rejeitados <span class="badge bg-dark ms-1">{{ $contadores['REJEITADO'] ?? 0 }}</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'REJEITADO'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'REJEITADO' ? 'btn-danger shadow-sm' : 'btn-outline-danger' }}">
+                <i class="bi bi-x-circle me-1"></i>Rejeitados <span class="badge bg-white text-danger ms-1 rounded-circle">{{ $contadores['REJEITADO'] ?? 0 }}</span>
             </a>
             
-            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'EXPORTADO'])) }}" class="btn btn-sm {{ $statusAtual === 'EXPORTADO' ? 'btn-secondary' : 'btn-outline-secondary' }}">
-                <i class="bi bi-download me-1"></i>Exportados <span class="badge bg-dark ms-1">{{ $contadores['EXPORTADO'] ?? 0 }}</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'EXPORTADO'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'EXPORTADO' ? 'btn-secondary shadow-sm' : 'btn-outline-secondary' }}">
+                <i class="bi bi-download me-1"></i>Exportados <span class="badge bg-white text-dark ms-1 rounded-circle">{{ $contadores['EXPORTADO'] ?? 0 }}</span>
             </a>
 
-            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'ESTORNADO'])) }}" class="btn btn-sm {{ $statusAtual === 'ESTORNADO' ? 'btn-dark' : 'btn-outline-dark' }}">
-                <i class="bi bi-arrow-counterclockwise me-1"></i>Estornados <span class="badge bg-white text-dark ms-1">{{ $contadores['ESTORNADO'] ?? 0 }}</span>
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'ESTORNADO'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'ESTORNADO' ? 'btn-dark shadow-sm' : 'btn-outline-dark' }}">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Estornados <span class="badge bg-white text-dark ms-1 rounded-circle">{{ $contadores['ESTORNADO'] ?? 0 }}</span>
             </a>
         </div>
     </div>
@@ -120,13 +120,14 @@
                     <input class="form-check-input" type="checkbox" id="selectAll">
                     <label class="form-check-label fw-semibold" for="selectAll" style="font-size:0.85rem">Selecionar todos</label>
                 </div>
-                <button type="submit" class="btn btn-success btn-sm" id="btnAprovarLote" style="display:none" onclick="return confirm('Aprovar os lançamentos selecionados?')">
-                    <i class="bi bi-check-all me-1"></i> Aprovar Selecionados (<span id="countSelecionados">0</span>)
+                <button type="submit" class="btn btn-success btn-sm px-3" id="btnAprovarLote" style="display:none" onclick="return confirm('Aprovar os lançamentos selecionados?')">
+                    <span id="loteBtnText"><i class="bi bi-check-all me-1"></i> Aprovar Selecionados (<span id="countSelecionados">0</span>)</span>
+                    <span id="loteBtnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                 </button>
             </div>
         @endif
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
                         @if (in_array($statusAtual, ['PENDENTE', 'CONFERIDO_SETORIAL']))
@@ -269,6 +270,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const checked = document.querySelectorAll('.item-check:checked').length;
         if (countEl) countEl.textContent = checked;
         if (btnLote) btnLote.style.display = checked > 0 ? '' : 'none';
+    }
+
+    const formLote = document.getElementById('formLote');
+    if (formLote && btnLote) {
+        formLote.addEventListener('submit', function() {
+            btnLote.disabled = true;
+            document.getElementById('loteBtnText').textContent = 'Processando...';
+            document.getElementById('loteBtnSpinner').classList.remove('d-none');
+        });
     }
 });
 </script>

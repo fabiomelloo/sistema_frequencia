@@ -10,10 +10,13 @@
         <p class="text-muted mb-0 small">Gerencie e aprove os lançamentos da sua equipe.</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="{{ route('lancamentos.lixeira') }}" class="btn btn-outline-secondary">
+        <a href="{{ route('lancamentos.importar.form') }}" class="btn btn-outline-info rounded-pill px-3 shadow-sm">
+            <i class="bi bi-upload me-1"></i> Importar CSV
+        </a>
+        <a href="{{ route('lancamentos.lixeira') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
             <i class="bi bi-trash me-1"></i> Lixeira
         </a>
-        <a href="{{ route('lancamentos.create') }}" class="btn btn-primary">
+        <a href="{{ route('lancamentos.create') }}" class="btn btn-primary rounded-pill px-3 shadow-sm">
             <i class="bi bi-plus-circle me-1"></i> Novo Lançamento
         </a>
     </div>
@@ -109,14 +112,14 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="bg-light">
                     <tr>
-                        <th style="width: 40px;" class="ps-3">
+                        <th style="width: 40px;" class="ps-3 border-0 rounded-start">
                             <input type="checkbox" class="form-check-input" id="checkAll">
                         </th>
-                        <th>Servidor</th>
-                        <th>Evento / Detalhes</th>
-                        <th>Referência</th>
-                        <th>Status</th>
-                        <th class="text-end pe-4">Ações</th>
+                        <th class="border-0">Servidor</th>
+                        <th class="border-0">Evento / Detalhes</th>
+                        <th class="border-0">Referência</th>
+                        <th class="border-0">Status</th>
+                        <th class="text-end pe-4 border-0 rounded-end">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -152,24 +155,28 @@
                                 </span>
                             </td>
                             <td class="text-end pe-4">
-                                <div class="btn-group">
+                                <div class="btn-group shadow-sm rounded-pill">
                                     @if ($lancamento->status->value === 'PENDENTE')
                                         <button type="button" class="btn btn-sm btn-outline-success" 
-                                                onclick="aprovarUm({{ $lancamento->id }})" 
+                                                onclick="aprovarUm({{ $lancamento->id }}, this)" 
                                                 title="Aprovar">
-                                            <i class="bi bi-check-lg"></i>
+                                            <i class="bi bi-check-lg icon-action"></i>
+                                            <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
                                         </button>
                                     @endif
 
-                                    <a href="{{ route('lancamentos.edit', $lancamento) }}" class="btn btn-sm btn-outline-primary" title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
+                                    @if ($lancamento->status->podeSerEditado())
+                                        <a href="{{ route('lancamentos.edit', $lancamento) }}" class="btn btn-sm btn-outline-primary" title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
 
-                                    <button type="button" class="btn btn-sm btn-outline-danger" 
-                                            onclick="deletarUm({{ $lancamento->id }})"
-                                            title="Excluir">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                onclick="deletarUm({{ $lancamento->id }}, this)"
+                                                title="Excluir">
+                                            <i class="bi bi-trash icon-action"></i>
+                                            <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -229,20 +236,30 @@
         });
     });
 
-    function deletarUm(id) {
+    function deletarUm(id, btn) {
         if(confirm('Tem certeza que deseja excluir este lançamento?')) {
+            showSpinner(btn);
             const form = document.getElementById('deleteForm');
             form.action = `/lancamentos/${id}`;
             form.submit();
         }
     }
 
-    function aprovarUm(id) {
+    function aprovarUm(id, btn) {
         if(confirm('Aprovar este lançamento?')) {
+            showSpinner(btn);
             const form = document.getElementById('approveForm');
             form.action = `/lancamentos/${id}/aprovar-setorial`;
             form.submit();
         }
+    }
+
+    function showSpinner(btn) {
+        const icon = btn.querySelector('.icon-action');
+        const spinner = btn.querySelector('.spinner-action');
+        if (icon) icon.classList.add('d-none');
+        if (spinner) spinner.classList.remove('d-none');
+        btn.disabled = true;
     }
 </script>
 @endsection

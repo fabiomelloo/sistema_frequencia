@@ -6,6 +6,7 @@ use App\Services\RelatorioService;
 use App\Models\LancamentoSetorial;
 use App\Models\Setor;
 use App\Models\Servidor;
+use App\Services\AuditService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -60,6 +61,10 @@ class RelatorioController extends Controller
         $dados = null;
         if ($servidorId) {
             $dados = $service->folhaEspelho((int) $servidorId, $competencia);
+            $servidorObj = Servidor::find($servidorId);
+            if ($servidorObj) {
+                AuditService::leu('Servidor', $servidorId, "Gerou relatório Espelho da Folha do servidor {$servidorObj->nome} para a competência {$competencia}");
+            }
         }
 
         $servidores = Servidor::where('ativo', true)->orderBy('nome')->get();
@@ -79,6 +84,8 @@ class RelatorioController extends Controller
     {
         $competencia = $request->get('competencia', now()->format('Y-m'));
         $csv = $service->gerarCsv($competencia);
+
+        AuditService::exportou('LancamentoSetorial', null, "Exportou relatório geral em CSV da competência {$competencia}");
 
         return response()->streamDownload(function () use ($csv) {
             echo "\xEF\xBB\xBF"; // BOM UTF-8

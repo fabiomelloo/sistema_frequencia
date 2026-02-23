@@ -92,6 +92,13 @@ class LancamentoSetorialController extends Controller
             $evento = EventoFolha::findOrFail($validated['evento_id']);
             $competencia = $validated['competencia'];
 
+            if (!Competencia::referenciaAberta($competencia)) {
+                return redirect()
+                    ->back()
+                    ->withInput()
+                    ->withErrors(['error' => "A competência {$competencia} está fechada para novos lançamentos."]);
+            }
+
             if (LancamentoSetorial::existeDuplicata($servidor->id, $evento->id, $competencia)) {
                 return redirect()
                     ->back()
@@ -353,8 +360,8 @@ class LancamentoSetorialController extends Controller
         }
 
         // impedir auto-aprovação (quem criou não pode conferir)
-        $criadorId = \App\Models\AuditLog::where('entidade_tipo', 'LancamentoSetorial')
-            ->where('entidade_id', $lancamento->id)
+        $criadorId = \App\Models\AuditLog::where('modelo', 'LancamentoSetorial')
+            ->where('modelo_id', $lancamento->id)
             ->where('acao', 'CRIOU')
             ->value('user_id');
         if ($criadorId && $criadorId === $user->id) {
@@ -406,6 +413,57 @@ class LancamentoSetorialController extends Controller
         return redirect()
             ->back()
             ->with('success', "{$aprovados} lançamento(s) conferido(s) pelo setor!");
+    }
+
+    public function cancelar(LancamentoSetorial $lancamento): RedirectResponse
+    {
+        $user = auth()->user();
+
+        $temAcesso = $lancamento->setor_origem_id === $user->setor_id
+            || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
+
+        if (!$temAcesso || !$lancamento->podeSerCancelado()) {
+            abort(403, 'Não autorizado ou lançamento não pode ser cancelado.');
+        }
+
+        $lancamento->status = LancamentoStatus::CANCELADO;
+        $lancamento->save();
+
+        AuditService::registrar('CANCELOU', 'LancamentoSetorial', $lancamento->id,
+            "Lançamento cancelado pelo usuário: servidor_id={$lancamento->servidor_id}, evento_id={$lancamento->evento_id}"
+        );
+
+        return redirect()
+            ->back()
+            ->with('success', 'Lançamento cancelado de forma definitiva!');
+    }
+
+    public function solicitarEstorno(Request $request, LancamentoSetorial $lancamento): RedirectResponse
+    {
+        $user = auth()->user();
+
+        $temAcesso = $lancamento->setor_origem_id === $user->setor_id
+            || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
+
+        if (!$temAcesso || !$lancamento->podeSolicitarEstorno()) {
+            abort(403, 'Não autorizado ou lançamento não pode ser estornado.');
+        }
+
+        $request->validate([
+            'motivo_estorno' => 'required|string|min:5|max:1000'
+        ]);
+
+        $lancamento->status = LancamentoStatus::ESTORNO_SOLICITADO;
+        $lancamento->motivo_rejeicao = $request->motivo_estorno; // We reuse motivo_rejeicao for the request reason
+        $lancamento->save();
+
+        AuditService::registrar('SOLICITOU_ESTORNO', 'LancamentoSetorial', $lancamento->id,
+            "Solicitação de Estorno registrada: servidor_id={$lancamento->servidor_id}. Motivo: {$request->motivo_estorno}"
+        );
+
+        return redirect()
+            ->back()
+            ->with('success', 'Solicitação de estorno enviada para a Central!');
     }
 }
 

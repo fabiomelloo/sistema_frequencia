@@ -117,11 +117,11 @@ class Competencia extends Model
      * Retorna os dias úteis do mês (segunda a sexta, excluindo feriados).
      * Feriados são lidos da configuração 'feriados_YYYY' (formato: Y-m-d separados por vírgula).
      */
-    public function obterDiasUteis(): int
+    public static function obterDiasUteis(string $referencia): int
     {
         try {
-            $inicio = Carbon::createFromFormat('Y-m', $this->referencia)->startOfMonth();
-            $fim = Carbon::createFromFormat('Y-m', $this->referencia)->endOfMonth();
+            $inicio = Carbon::createFromFormat('Y-m', $referencia)->startOfMonth();
+            $fim = Carbon::createFromFormat('Y-m', $referencia)->endOfMonth();
         } catch (\Exception $e) {
             return 0;
         }

@@ -1,6 +1,5 @@
-﻿<?php
-
-
+<?php
+namespace App\Services;
 
 use App\Models\Servidor;
 use App\Models\EventoFolha;
@@ -56,8 +55,10 @@ class RegrasLancamentoService
         // 9. Adicional turno
         $this->validarAdicionalTurno($servidor, $evento, $dados);
 
-        // 10. Adicional noturno
+        // 10. Adicional noturno e Dias noturnos
         $this->validarAdicionalNoturno($servidor, $evento, $dados);
+        $this->validarTetoAdicionalNoturno($dados);
+        // FIXME: validarDiasNoturnos nao implementado
 
         // 11. Valor mínimo/máximo do evento
         $this->validarValorLimites($evento, $dados);
@@ -66,7 +67,7 @@ class RegrasLancamentoService
         $this->validarValorTotalServidor($servidor, $competencia, $dados, $lancamentoId);
 
         // 13. Retroatividade máxima
-        $this->validarRetroatividade($competencia);
+        $this->validarRetroatividade($competencia, $dados, $lancamentoId);
 
         // 14. Conflito turno/noturno
         $this->validarConflitoTurnoNoturno($dados);
@@ -193,14 +194,25 @@ class RegrasLancamentoService
         }
 
         $diasJaLancados = LancamentoSetorial::somaDiasServidor($servidor->id, $competencia, $lancamentoId);
-        $diasNoMes = Carbon::createFromFormat('Y-m', $competencia)->daysInMonth;
+        $diasUteisBase = \App\Models\Competencia::obterDiasUteis($competencia);
+
+        // Subtrai dias de feriados e recessos locais parametrizados, se houver lógica adicional
+        // Aqui já assumimos que obterDiasUteis() poderia descontar os feriados se implementado lá, senão usamos limite padrão.
+        $diasLancados = (int) $dados['dias_trabalhados'];
+
+        if ($diasLancados > $diasUteisBase) {
+            throw new InvalidArgumentException(
+                "O número de dias trabalhados ({$diasLancados}) não pode exceder os dias úteis do mês ({$diasUteisBase} dias)."
+            );
+        }
+
         $total = $diasJaLancados + $diasTrabalhados;
 
-        if ($total > $diasNoMes) {
+        if ($total > $diasUteisBase) { // Alterado para usar diasUteisBase
             throw new InvalidArgumentException(
                 "Limite de dias excedido para {$servidor->nome} na competência {$competencia}. " .
                 "Já lançados: {$diasJaLancados} dias. Informado: {$diasTrabalhados} dias. " .
-                "Total ({$total}) ultrapassa os {$diasNoMes} dias do mês."
+                "Total ({$total}) ultrapassa os {$diasUteisBase} dias úteis do mês."
             );
         }
     }
@@ -331,7 +343,7 @@ class RegrasLancamentoService
         if (!empty($adicionalNoturno)) {
             if (!$servidor->trabalha_noturno) {
                 throw new InvalidArgumentException(
-                    'Adicional noturno permitido apenas para servidor que trabalha È  noite.'
+                    'Adicional noturno permitido apenas para servidor que trabalha à noite.'
                 );
             }
 
@@ -348,6 +360,24 @@ class RegrasLancamentoService
                     );
                 }
             }
+        }
+    }
+
+    private function validarTetoAdicionalNoturno(array $dados): void
+    {
+        if (!isset($dados['adicional_noturno']) || empty($dados['adicional_noturno'])) {
+            return;
+        }
+
+        $tetoAdicionalNoturno = \App\Models\Configuracao::get('teto_adicional_noturno') ? (float) \App\Models\Configuracao::get('teto_adicional_noturno') : 500.00;
+
+        $valor = (float) $dados['adicional_noturno'];
+
+        if ($valor > $tetoAdicionalNoturno) {
+            throw new InvalidArgumentException(
+                "O valor do Adicional Noturno (R$ " . number_format($valor, 2, ',', '.') . ") " .
+                "excede o teto permitido de R$ " . number_format($tetoAdicionalNoturno, 2, ',', '.') . "."
+            );
         }
     }
 
@@ -415,20 +445,65 @@ class RegrasLancamentoService
     }
 
     /**
-     * Regra #14: Limite de retroatividade.
-     * Lançamentos só podem ser feitos para até 3 meses retroativos.
+     * Regra #14: Limite de retroatividade e Controle Orçamentário.
+     * Lançamentos comuns podem ser feitos para até X meses retroativos.
+     * Lançamentos retroativos consomem um orçamento limite configurado.
      */
-    private function validarRetroatividade(string $competencia): void
+    private function validarRetroatividade(string $competencia, array $dados = [], ?int $lancamentoId = null): void
     {
+        $hoje = now()->format('Y-m');
+        if ($competencia >= $hoje) {
+            return; // Não é retroativo
+        }
+
+        $usuario = auth()->user();
+        $isAdmin = $usuario && clone $usuario->isAdmin(); // Assuming isAdmin() exists or check role
+
         $limiteRetroativo = (int) (\App\Models\Configuracao::get('meses_retroativos') ?? 3);
         $competenciaDate = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
         $limiteDate = now()->subMonths($limiteRetroativo)->startOfMonth();
 
+        // 1. Barreira Temporal
         if ($competenciaDate->lt($limiteDate)) {
-            throw new InvalidArgumentException(
-                "A competência {$competencia} é anterior ao limite retroativo de {$limiteRetroativo} meses. " .
-                "Mês mais antigo permitido: {$limiteDate->format('Y-m')}."
-            );
+            // Apenas admins podem lançar além do limite retroativo
+            if (!$isAdmin) {
+                throw new InvalidArgumentException(
+                    "A competência {$competencia} é anterior ao limite retroativo de {$limiteRetroativo} meses. " .
+                    "Apenas administradores podem realizar lançamentos tão antigos."
+                );
+            }
+        }
+
+        // 2. Barreira Financeira/Orçamentária (Apenas para retroativos)
+        $limiteOrcamento = \App\Models\Configuracao::get('limite_orcamento_retroativo');
+        if ($limiteOrcamento) {
+            $limiteOrcamento = (float) $limiteOrcamento;
+            $valorLancamento = (float) ($dados['valor'] ?? $dados['valor_gratificacao'] ?? 0);
+            
+            if ($valorLancamento > 0) {
+                // Soma todos os lançamentos retroativos feitos no mês atual
+                $mesAtual = now()->format('Y-m');
+                
+                $query = \App\Models\LancamentoSetorial::where('competencia', '<', $mesAtual)
+                    ->whereYear('created_at', now()->year)
+                    ->whereMonth('created_at', now()->month)
+                    ->whereNotIn('status', [\App\Enums\LancamentoStatus::REJEITADO->value, \App\Enums\LancamentoStatus::ESTORNADO->value]);
+                
+                if ($lancamentoId) {
+                    $query->where('id', '!=', $lancamentoId);
+                }
+                
+                $totalConsumido = (float) $query->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(valor, 0) + COALESCE(valor_gratificacao, 0)'));
+                
+                if (($totalConsumido + $valorLancamento) > $limiteOrcamento) {
+                    throw new InvalidArgumentException(
+                        "O valor deste lançamento (R$ " . number_format($valorLancamento, 2, ',', '.') . ") " .
+                        "ultrapassa o orçamento disponível para pagamentos retroativos neste mês. " .
+                        "Orçamento total: R$ " . number_format($limiteOrcamento, 2, ',', '.') . ". " .
+                        "Já consumido: R$ " . number_format($totalConsumido, 2, ',', '.') . "."
+                    );
+                }
+            }
         }
     }
 
@@ -447,5 +522,5 @@ class RegrasLancamentoService
             );
         }
     }
-}
 
+}

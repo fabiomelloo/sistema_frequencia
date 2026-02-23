@@ -53,6 +53,8 @@ class ServidorController extends Controller
     {
         $servidor->load(['setor', 'lancamentos.evento', 'lancamentos.setorOrigem']);
 
+        AuditService::leu('Servidor', $servidor->id, "Visualizou os detalhes e lançamentos do servidor: {$servidor->nome}");
+
         return view('admin.servidores.show', [
             'servidor' => $servidor,
         ]);

@@ -7,9 +7,11 @@ enum LancamentoStatus: string
     case PENDENTE = 'PENDENTE';
     case CONFERIDO_SETORIAL = 'CONFERIDO_SETORIAL';
     case CONFERIDO = 'CONFERIDO';
-    case REJEITADO = 'REJEITADO';
+    case REJEITADO = 'REJEITADO'; // Devolvido para correção
     case EXPORTADO = 'EXPORTADO';
     case ESTORNADO = 'ESTORNADO';
+    case CANCELADO = 'CANCELADO';
+    case ESTORNO_SOLICITADO = 'ESTORNO_SOLICITADO';
 
     public function label(): string
     {
@@ -17,9 +19,11 @@ enum LancamentoStatus: string
             self::PENDENTE => 'Pendente',
             self::CONFERIDO_SETORIAL => 'Conferido (Setorial)',
             self::CONFERIDO => 'Conferido (Central)',
-            self::REJEITADO => 'Rejeitado',
+            self::REJEITADO => 'Correção Solicitada',
             self::EXPORTADO => 'Exportado',
             self::ESTORNADO => 'Estornado',
+            self::CANCELADO => 'Cancelado',
+            self::ESTORNO_SOLICITADO => 'Estorno Solicitado',
         };
     }
 
@@ -32,12 +36,14 @@ enum LancamentoStatus: string
             self::REJEITADO => 'danger',
             self::EXPORTADO => 'secondary',
             self::ESTORNADO => 'dark',
+            self::CANCELADO => 'danger',
+            self::ESTORNO_SOLICITADO => 'warning',
         };
     }
 
     public function podeSerEditado(): bool
     {
-        return in_array($this, [self::PENDENTE, self::REJEITADO, self::ESTORNADO]);
+        return in_array($this, [self::PENDENTE, self::REJEITADO]);
     }
 
     public function podeSerAprovadoSetorial(): bool

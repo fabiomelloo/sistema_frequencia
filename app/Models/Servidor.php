@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use App\Observers\ServidorObserver;
 use App\Traits\MaskedCpf;
 use Carbon\Carbon;
 
+#[ObservedBy(ServidorObserver::class)]
 class Servidor extends Model
 {
     use MaskedCpf;

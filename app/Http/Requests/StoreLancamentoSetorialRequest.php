@@ -38,7 +38,8 @@ class StoreLancamentoSetorialRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            if ($validator->fails()) {
+            // Se já houver erros na validação base, não executa validações pesadas.
+            if ($validator->messages()->isNotEmpty()) {
                 return;
             }
 

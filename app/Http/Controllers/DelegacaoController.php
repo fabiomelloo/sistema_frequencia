@@ -22,8 +22,8 @@ class DelegacaoController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
-        // Usuários do mesmo setor para delegar (exceto o próprio)
-        $usuarios = User::where('setor_id', $user->setor_id)
+        // Usuários SETORIAIS disponíveis para receber delegação (exceto o próprio)
+        $usuarios = User::where('role', \App\Enums\UserRole::SETORIAL->value)
             ->where('id', '!=', $user->id)
             ->orderBy('name')
             ->get();
@@ -41,10 +41,21 @@ class DelegacaoController extends Controller
         $user = auth()->user();
         $delegadoId = $validated['delegado_id'];
 
-        // Validar que o delegado é do mesmo setor
         $delegado = User::findOrFail($delegadoId);
-        if ($delegado->setor_id !== $user->setor_id) {
-            return redirect()->back()->withErrors(['error' => 'O delegado deve ser do mesmo setor.']);
+
+        // Validar que o delegado é SETORIAL
+        if (!$delegado->isSetorial()) {
+            return redirect()->back()->withErrors(['error' => 'Permissão negada: O delegado deve ter o perfil SETORIAL.']);
+        }
+
+        // Segregação de Função: Prevenir delegação cruzada (A -> B e B -> A) simultaneamente
+        $delegacaoCruzada = Delegacao::where('delegante_id', $delegadoId)
+            ->where('delegado_id', $user->id)
+            ->where('ativa', true)
+            ->exists();
+
+        if ($delegacaoCruzada) {
+            return redirect()->back()->withErrors(['error' => 'Violação de Segregação: Este usuário já possui uma delegação ativa para você. Delegação cruzada não é permitida.']);
         }
 
         // Verificar se já existe delegação ativa

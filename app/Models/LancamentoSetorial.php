@@ -102,6 +102,16 @@ class LancamentoSetorial extends Model
         return $this->status === \App\Enums\LancamentoStatus::ESTORNADO;
     }
 
+    public function isCancelado(): bool
+    {
+        return $this->status === \App\Enums\LancamentoStatus::CANCELADO;
+    }
+
+    public function isEstornoSolicitado(): bool
+    {
+        return $this->status === \App\Enums\LancamentoStatus::ESTORNO_SOLICITADO;
+    }
+
     public function podeSerEditado(): bool
     {
         return in_array($this->status, [
@@ -114,6 +124,19 @@ class LancamentoSetorial extends Model
     public function podeSerReenviado(): bool
     {
         return $this->status === \App\Enums\LancamentoStatus::REJEITADO;
+    }
+
+    public function podeSerCancelado(): bool
+    {
+        return in_array($this->status, [
+            \App\Enums\LancamentoStatus::PENDENTE,
+            \App\Enums\LancamentoStatus::REJEITADO,
+        ]);
+    }
+
+    public function podeSolicitarEstorno(): bool
+    {
+        return $this->status === \App\Enums\LancamentoStatus::EXPORTADO;
     }
 
     /**
@@ -213,6 +236,7 @@ class LancamentoSetorial extends Model
             ->whereNotIn('status', [
             \App\Enums\LancamentoStatus::REJEITADO->value,
             \App\Enums\LancamentoStatus::ESTORNADO->value,
+            \App\Enums\LancamentoStatus::CANCELADO->value,
         ]);
 
         if ($ignorarId) {
@@ -232,6 +256,7 @@ class LancamentoSetorial extends Model
             ->whereNotIn('status', [
                 \App\Enums\LancamentoStatus::REJEITADO->value,
                 \App\Enums\LancamentoStatus::ESTORNADO->value,
+                \App\Enums\LancamentoStatus::CANCELADO->value,
             ]);
 
         if ($ignorarId) {
@@ -262,6 +287,7 @@ class LancamentoSetorial extends Model
             ->whereNotIn('status', [
                 \App\Enums\LancamentoStatus::REJEITADO->value,
                 \App\Enums\LancamentoStatus::ESTORNADO->value,
+                \App\Enums\LancamentoStatus::CANCELADO->value,
             ]);
 
         if ($ignorarId) {

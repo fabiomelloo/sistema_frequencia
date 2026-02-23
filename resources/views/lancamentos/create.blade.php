@@ -20,9 +20,9 @@
     </div>
 @endif
 
-<div class="card">
-    <div class="card-body">
-        <form action="{{ route('lancamentos.store') }}" method="POST" id="formLancamento">
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4 p-md-5">
+        <form action="{{ route('lancamentos.store') }}" method="POST" id="formLancamento" class="needs-validation">
             @csrf
 
             <div class="row g-3 mb-3">
@@ -143,9 +143,12 @@
                 </div>
             </div>
 
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i> Enviar Lançamento</button>
-                <a href="{{ route('lancamentos.index') }}" class="btn btn-outline-secondary">Cancelar</a>
+            <div class="d-flex gap-2 pt-3 border-top mt-4">
+                <button type="submit" class="btn btn-primary px-4 py-2" id="btnSubmit">
+                    <span id="btnText"><i class="bi bi-send me-2"></i>Enviar Lançamento</span>
+                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                </button>
+                <a href="{{ route('lancamentos.index') }}" class="btn btn-light px-4 py-2 text-secondary fw-semibold">Cancelar</a>
             </div>
         </form>
     </div>
@@ -188,10 +191,29 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggle(id, show) {
         const el = document.getElementById(id);
         if (el) el.style.display = show ? '' : 'none';
+        
+        // Add subtle animation for showing inputs
+        if (show && el) {
+            el.style.animation = 'fadeIn 0.3s ease-out';
+        }
     }
 
     eventoSelect.addEventListener('change', showFields);
     showFields();
+
+    // Loading State no botão
+    const form = document.getElementById('formLancamento');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const btnText = document.getElementById('btnText');
+    const btnSpinner = document.getElementById('btnSpinner');
+
+    form.addEventListener('submit', function(e) {
+        if(form.checkValidity()) {
+            btnSubmit.disabled = true;
+            btnText.textContent = 'Enviando...';
+            btnSpinner.classList.remove('d-none');
+        }
+    });
 });
 </script>
 @endsection

@@ -48,7 +48,9 @@ class PainelConferenciaController extends Controller
                 COUNT(CASE WHEN status = 'CONFERIDO' THEN 1 END) as CONFERIDO,
                 COUNT(CASE WHEN status = 'REJEITADO' THEN 1 END) as REJEITADO,
                 COUNT(CASE WHEN status = 'EXPORTADO' THEN 1 END) as EXPORTADO,
-                COUNT(CASE WHEN status = 'ESTORNADO' THEN 1 END) as ESTORNADO
+                COUNT(CASE WHEN status = 'ESTORNADO' THEN 1 END) as ESTORNADO,
+                COUNT(CASE WHEN status = 'CANCELADO' THEN 1 END) as CANCELADO,
+                COUNT(CASE WHEN status = 'ESTORNO_SOLICITADO' THEN 1 END) as ESTORNO_SOLICITADO
             ")->first();
 
         $contadores = [];
@@ -223,16 +225,16 @@ class PainelConferenciaController extends Controller
     }
 
     /**
-     * Estorno: EXPORTADO â†’ ESTORNADO (reverter exportação)
-     * Regra #11: exige motivo obrigatório
+     * Estorno: EXPORTADO ou ESTORNO_SOLICITADO â†’ ESTORNADO (reverter exportação)
+     * Regra #11: exige motivo obrigatório se feito direto. Se for aprovação de solicitacao, usa o motivo enviado.
      * Regra #12: notifica o setor
      */
-    public function estornar(\App\Http\Requests\EstornarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
+    public function estornar(\Illuminate\Http\Request $request, LancamentoSetorial $lancamento): RedirectResponse
     {
-        if (!$lancamento->isExportado()) {
+        if (!$lancamento->isExportado() && !$lancamento->isEstornoSolicitado()) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Apenas lançamentos EXPORTADOS podem ser estornados.']);
+                ->withErrors(['error' => 'Apenas lançamentos EXPORTADOS ou com ESTORNO SOLICITADO podem ser estornados.']);
         }
 
         if (!Competencia::referenciaAberta($lancamento->competencia)) {
@@ -242,10 +244,25 @@ class PainelConferenciaController extends Controller
         }
 
         $dadosAntes = $lancamento->toArray();
-        $motivo = $request->validated()['motivo_estorno'];
+        $motivo = '';
+
+        if ($lancamento->isExportado()) {
+            $request->validate([
+                'motivo_estorno' => 'required|string|min:5|max:1000'
+            ]);
+            $motivo = $request->input('motivo_estorno');
+        } else {
+            // Se já era ESTORNO_SOLICITADO, aproveita o motivo ou permite override
+            $request->validate([
+                'motivo_estorno' => 'nullable|string|min:5|max:1000'
+            ]);
+            $motivo = $request->input('motivo_estorno') ?? $lancamento->motivo_rejeicao;
+        }
 
         // Marca como ESTORNADO (status próprio no enum)
         $lancamento->status = LancamentoStatus::ESTORNADO;
+        // Salva o motivo real na coluna e reseta o validador para indicar que precisa passar por aprovação de novo
+        $lancamento->motivo_rejeicao = $motivo; 
         $lancamento->exportado_em = null;
         $lancamento->id_validador = null;
         $lancamento->validated_at = null;

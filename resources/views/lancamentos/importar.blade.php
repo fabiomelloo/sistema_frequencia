@@ -22,12 +22,26 @@
 
                 @if($errors->any())
                     <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        <h6 class="alert-heading fw-bold"><i class="bi bi-exclamation-triangle me-1"></i> Erros na Importação:</h6>
+                        <h6 class="alert-heading fw-bold"><i class="bi bi-exclamation-triangle me-1"></i> Erro:</h6>
                         <ul class="mb-0 mt-2">
                             @foreach ($errors->all() as $error)
                                 <li>{{ $error }}</li>
                             @endforeach
                         </ul>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+                
+                @if(session('erros_importacao'))
+                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        <h6 class="alert-heading fw-bold"><i class="bi bi-exclamation-triangle me-1"></i> Erros no processamento das linhas:</h6>
+                        <div class="mt-2" style="max-height: 250px; overflow-y: auto;">
+                            <ul class="mb-0">
+                                @foreach (session('erros_importacao') as $erroLinha)
+                                    <li>{{ $erroLinha }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 @endif

@@ -12,3 +12,6 @@ Schedule::command('sla:verificar')->dailyAt('08:00');
 Schedule::call(function () {
     \App\Services\NotificacaoService::notificarPrazosProximos(3);
 })->dailyAt('07:00')->name('notificar-prazos-proximos');
+
+// Fechar competências e prazos setoriais diariamente à meia-noite
+Schedule::command('frequencia:fechar-competencias')->daily();
