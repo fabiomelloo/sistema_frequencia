@@ -47,7 +47,7 @@
                         </td>
                         <td>
                             <span class="badge bg-light text-dark border">
-                                {{ \Carbon\Carbon::createFromFormat('m/Y', $lancamento->competencia)->format('M/Y') }}
+                                {{ \Carbon\Carbon::createFromFormat('Y-m', $lancamento->competencia)->translatedFormat('M/Y') }}
                             </span>
                         </td>
                         <td class="text-muted small">

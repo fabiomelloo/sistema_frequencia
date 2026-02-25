@@ -29,9 +29,9 @@ class RelatorioService
 
         // Por setor
         $porSetor = $lancamentos->groupBy('setor_origem_id')->map(function ($grupo) {
-            return [
-                'setor' => $grupo->first()->setorOrigem->nome ?? 'N/A',
-                'total' => $grupo->count(),
+            return (object) [
+                'setor_nome' => $grupo->first()->setorOrigem->nome ?? 'N/A',
+                'qtd' => $grupo->count(),
                 'pendentes' => $grupo->where('status', LancamentoStatus::PENDENTE)->count(),
                 'conferidos' => $grupo->where('status', LancamentoStatus::CONFERIDO)->count()
                     + $grupo->where('status', LancamentoStatus::CONFERIDO_SETORIAL)->count(),
@@ -40,17 +40,17 @@ class RelatorioService
                 'valor_total' => $grupo->sum('valor') + $grupo->sum('valor_gratificacao')
                     + $grupo->sum('adicional_turno') + $grupo->sum('adicional_noturno'),
             ];
-        })->values()->toArray();
+        })->values();
 
         // Por evento
         $porEvento = $lancamentos->groupBy('evento_id')->map(function ($grupo) {
-            return [
-                'evento' => $grupo->first()->evento->descricao ?? 'N/A',
-                'codigo' => $grupo->first()->evento->codigo_evento ?? '',
-                'total' => $grupo->count(),
+            return (object) [
+                'descricao' => $grupo->first()->evento->descricao ?? 'N/A',
+                'codigo_evento' => $grupo->first()->evento->codigo_evento ?? '',
+                'qtd' => $grupo->count(),
                 'valor_total' => $grupo->sum('valor') + $grupo->sum('valor_gratificacao'),
             ];
-        })->values()->toArray();
+        })->values();
 
         return [
             'competencia' => $competencia,

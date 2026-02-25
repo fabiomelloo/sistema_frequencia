@@ -25,7 +25,7 @@ class LancamentoSetorial extends Model
         'adicional_turno',
         'adicional_noturno',
         'observacao',
-        // Campos de workflow — NÃO incluir no $fillable (prevenir mass assignment)
+        //  Campos de workflow — NÃO incluir no $fillable (prevenir mass assignment)
         // 'status', 'motivo_rejeicao', 'id_validador', 'validated_at', 'exportado_em'
         // 'conferido_setorial_por', 'conferido_setorial_em'
     ];
@@ -45,6 +45,7 @@ class LancamentoSetorial extends Model
         'porcentagem_periculosidade' => 'integer',
         'adicional_turno' => 'decimal:2',
         'adicional_noturno' => 'decimal:2',
+        'motivo_estorno' => 'string',
     ];
 
     public function servidor(): BelongsTo

@@ -15,11 +15,11 @@ class RelatorioController extends Controller
 {
     public function resumo(Request $request, RelatorioService $service): View
     {
-        $competencia = $request->get('competencia', now()->format('Y-m'));
-        $dados = $service->resumoCompetencia($competencia);
-        
         $competencias = LancamentoSetorial::select('competencia')
             ->distinct()->orderBy('competencia', 'desc')->pluck('competencia');
+
+        $competencia = $request->get('competencia', $competencias->first() ?? now()->format('Y-m'));
+        $dados = $service->resumoCompetencia($competencia);
 
         return view('admin.relatorios.resumo', [
             'estatisticas' => [

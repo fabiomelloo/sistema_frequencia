@@ -12,11 +12,9 @@ use Exception;
 class GeradorTxtFolhaService
 {
     private const TAMANHO_CODIGO_EVENTO = 10;
-    private const TAMANHO_MATRICULA = 13;
-    private const TAMANHO_VALOR = 14;
-    private const TAMANHO_DIAS = 3;
-    private const TAMANHO_PORCENTAGEM = 3;
-    private const TAMANHO_LINHA = 73; // 10+13+14+3+3+3+3+10+14
+    private const TAMANHO_MATRICULA = 14;
+    private const TAMANHO_VALOR = 15;
+    private const TAMANHO_LINHA = 39; // 10 + 14 + 15
 
     public function gerar(?string $competencia = null): array
     {
@@ -108,33 +106,13 @@ class GeradorTxtFolhaService
 
     private function formatarLinha(LancamentoSetorial $lancamento): string
     {
-        $codigoEvento = $this->formatarCodigoEvento($lancamento->evento->codigo_evento);
-        $matricula = $this->formatarMatricula($lancamento->servidor->matricula);
-        $valor = $this->formatarValor($lancamento->valor ?? 0.00);
-        $dias = str_pad($lancamento->dias_trabalhados ?? 0, self::TAMANHO_DIAS, '0', STR_PAD_LEFT);
-        $pctInsalubridade = str_pad($lancamento->porcentagem_insalubridade ?? 0, self::TAMANHO_PORCENTAGEM, '0', STR_PAD_LEFT);
-        $pctPericulosidade = str_pad($lancamento->porcentagem_periculosidade ?? 0, self::TAMANHO_PORCENTAGEM, '0', STR_PAD_LEFT);
-        $diasNoturnos = str_pad($lancamento->dias_noturnos ?? 0, self::TAMANHO_DIAS, '0', STR_PAD_LEFT);
-        $adicionalTurno = str_pad(number_format($lancamento->adicional_turno ?? 0, 2, '', ''), self::TAMANHO_CODIGO_EVENTO, '0', STR_PAD_LEFT);
-        $valorGratificacao = $this->formatarValor($lancamento->valor_gratificacao ?? 0.00);
+        $codigoEvento = str_pad($lancamento->evento->codigo_evento, self::TAMANHO_CODIGO_EVENTO, '0', STR_PAD_LEFT);
+        $matricula = str_pad($lancamento->servidor->matricula, self::TAMANHO_MATRICULA, '0', STR_PAD_LEFT);
+        
+        $valorCentavos = (int) round(($lancamento->valor ?? 0) * 100);
+        $valor = str_pad($valorCentavos, self::TAMANHO_VALOR, '0', STR_PAD_LEFT);
 
-        return $codigoEvento . $matricula . $valor . $dias . $pctInsalubridade . $pctPericulosidade . $diasNoturnos . $adicionalTurno . $valorGratificacao;
-    }
-
-    private function formatarCodigoEvento(string $codigo): string
-    {
-        return str_pad($codigo, self::TAMANHO_CODIGO_EVENTO, '0', STR_PAD_LEFT);
-    }
-
-    private function formatarMatricula(string $matricula): string
-    {
-        return str_pad($matricula, self::TAMANHO_MATRICULA, '0', STR_PAD_LEFT);
-    }
-
-    private function formatarValor(float $valor): string
-    {
-        $valorFormatado = number_format($valor, 2, '', '');
-        return str_pad($valorFormatado, self::TAMANHO_VALOR, '0', STR_PAD_LEFT);
+        return $codigoEvento . $matricula . $valor;
     }
 
     private function validarTamanhoLinha(string $linha, int $lancamentoId): void

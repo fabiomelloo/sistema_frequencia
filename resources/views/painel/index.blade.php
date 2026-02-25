@@ -190,45 +190,12 @@
                                         </button>
                                     @endif
 
-                                    @if ($lancamento->isExportado())
-                                        <form action="{{ route('painel.estornar', $lancamento) }}" method="POST" onsubmit="return confirm('ATENÇÃO: Deseja realmente estornar este lançamento exportado?');">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-dark" title="Estornar Exportação">
-                                                <i class="bi bi-arrow-counterclockwise"></i>
-                                            </button>
-                                        </form>
+                                    @if ($lancamento->isExportado() || $lancamento->isEstornoSolicitado())
+                                        <button type="button" class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#estornoModal{{ $lancamento->id }}" title="Estornar Exportação">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
                                     @endif
                                 </div>
-
-                                {{-- Modal de Rejeição --}}
-                                @if ($lancamento->isConferidoSetorial() || $lancamento->isPendente())
-                                    <div class="modal fade text-dark" id="rejeicaoModal{{ $lancamento->id }}" tabindex="-1">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header bg-danger text-white">
-                                                    <h5 class="modal-title"><i class="bi bi-x-circle me-1"></i>Rejeitar Lançamento</h5>
-                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <form action="{{ route('painel.rejeitar', $lancamento) }}" method="POST">
-                                                    @csrf
-                                                    <div class="modal-body">
-                                                        <p class="text-muted mb-2">
-                                                            <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
-                                                        </p>
-                                                        <div class="mb-3">
-                                                            <label for="motivo{{ $lancamento->id }}" class="form-label fw-semibold">Motivo da Rejeição <span class="text-danger">*</span></label>
-                                                            <textarea name="motivo_rejeicao" id="motivo{{ $lancamento->id }}" class="form-control" rows="4" required placeholder="Descreva o motivo da rejeição..."></textarea>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                        <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle me-1"></i>Rejeitar</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endif
                             </td>
                         </tr>
                     @empty
@@ -244,6 +211,72 @@
         </div>
     </div>
 </form>
+
+
+@foreach ($lancamentos as $lancamento)
+    @if ($lancamento->isConferidoSetorial() || $lancamento->isPendente())
+        <div class="modal fade text-dark" id="rejeicaoModal{{ $lancamento->id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title"><i class="bi bi-x-circle me-1"></i>Rejeitar Lançamento</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ route('painel.rejeitar', $lancamento) }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <p class="text-muted mb-2">
+                                <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
+                            </p>
+                            <div class="mb-3">
+                                <label for="motivo{{ $lancamento->id }}" class="form-label fw-semibold">Motivo da Rejeição <span class="text-danger">*</span></label>
+                                <textarea name="motivo_rejeicao" id="motivo{{ $lancamento->id }}" class="form-control" rows="4" required placeholder="Descreva o motivo da rejeição..."></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle me-1"></i>Rejeitar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if ($lancamento->isExportado() || $lancamento->isEstornoSolicitado())
+        <div class="modal fade text-dark" id="estornoModal{{ $lancamento->id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-1"></i>Estornar Lançamento</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ route('painel.estornar', $lancamento) }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <p class="text-muted mb-2">
+                                <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
+                            </p>
+                            @if ($lancamento->isEstornoSolicitado() && $lancamento->motivo_rejeicao)
+                                <div class="alert alert-info small mb-3">
+                                    <strong>Motivo da solicitação:</strong> {{ $lancamento->motivo_rejeicao }}
+                                </div>
+                            @endif
+                            <div class="mb-3">
+                                <label for="motivo_estorno{{ $lancamento->id }}" class="form-label fw-semibold">Motivo do Estorno</label>
+                                <textarea name="motivo_estorno" id="motivo_estorno{{ $lancamento->id }}" class="form-control" rows="3" placeholder="Descreva o motivo do estorno (opcional)..."></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-dark"><i class="bi bi-arrow-counterclockwise me-1"></i>Confirmar Estorno</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+@endforeach
 
 @if ($lancamentos->hasPages())
     <nav class="mt-3">{{ $lancamentos->links() }}</nav>

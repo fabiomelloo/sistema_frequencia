@@ -50,8 +50,10 @@ class EventoFolha extends Model
 
     public function temDireitoNoSetor($setorId): bool
     {
-        return $this->setoresComDireito()
-            ->where('setor_id', $setorId)
-            ->exists();
+        return \Illuminate\Support\Facades\Cache::remember("evento_{$this->id}_setor_{$setorId}_direito", now()->addHours(1), function () use ($setorId) {
+            return $this->setoresComDireito()
+                ->where('setor_id', $setorId)
+                ->exists();
+        });
     }
 }

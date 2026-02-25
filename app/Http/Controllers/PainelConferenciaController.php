@@ -13,6 +13,7 @@ use App\Services\AuditService;
 use App\Services\NotificacaoService;
 use App\Http\Requests\RejeitarLancamentoRequest;
 use App\Http\Requests\AprovarEmLoteRequest;
+use App\Http\Requests\EstornarLancamentoRequest;
 use App\Enums\LancamentoStatus;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -158,12 +159,12 @@ class PainelConferenciaController extends Controller
     {
         $ids = $request->validated()['lancamento_ids'];
         
-        // Eager load para evitar N+1 no AuditLog e Notificação
+
         $lancamentos = LancamentoSetorial::whereIn('id', $ids)
             ->with(['servidor', 'evento'])
             ->get();
         
-        // Agrupar por competência para otimizar validação
+
         $porCompetencia = $lancamentos->groupBy('competencia');
 
         $aprovados = 0;
@@ -173,7 +174,7 @@ class PainelConferenciaController extends Controller
         DB::beginTransaction();
         try {
             foreach ($porCompetencia as $competencia => $grupo) {
-                // Validação de competência otimizada (uma vez por grupo)
+
                 if (!Competencia::referenciaAberta($competencia)) {
                     $competenciaFechada += $grupo->count();
                     continue;
@@ -229,7 +230,7 @@ class PainelConferenciaController extends Controller
      * Regra #11: exige motivo obrigatório se feito direto. Se for aprovação de solicitacao, usa o motivo enviado.
      * Regra #12: notifica o setor
      */
-    public function estornar(\Illuminate\Http\Request $request, LancamentoSetorial $lancamento): RedirectResponse
+    public function estornar(EstornarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
     {
         if (!$lancamento->isExportado() && !$lancamento->isEstornoSolicitado()) {
             return redirect()
@@ -244,25 +245,16 @@ class PainelConferenciaController extends Controller
         }
 
         $dadosAntes = $lancamento->toArray();
-        $motivo = '';
 
-        if ($lancamento->isExportado()) {
-            $request->validate([
-                'motivo_estorno' => 'required|string|min:5|max:1000'
-            ]);
-            $motivo = $request->input('motivo_estorno');
-        } else {
-            // Se já era ESTORNO_SOLICITADO, aproveita o motivo ou permite override
-            $request->validate([
-                'motivo_estorno' => 'nullable|string|min:5|max:1000'
-            ]);
-            $motivo = $request->input('motivo_estorno') ?? $lancamento->motivo_rejeicao;
-        }
 
-        // Marca como ESTORNADO (status próprio no enum)
+        $motivo = $request->input('motivo_estorno')
+            ?? $lancamento->motivo_estorno
+            ?? $lancamento->motivo_rejeicao
+            ?? '';
+
+
         $lancamento->status = LancamentoStatus::ESTORNADO;
-        // Salva o motivo real na coluna e reseta o validador para indicar que precisa passar por aprovação de novo
-        $lancamento->motivo_rejeicao = $motivo; 
+        $lancamento->motivo_estorno = $motivo;
         $lancamento->exportado_em = null;
         $lancamento->id_validador = null;
         $lancamento->validated_at = null;
@@ -288,6 +280,12 @@ class PainelConferenciaController extends Controller
     {
         try {
             $competencia = $request->get('competencia');
+
+            if (!$competencia) {
+                return redirect()
+                    ->route('painel.index')
+                    ->withErrors(['error' => 'Selecione uma competência para exportar.']);
+            }
 
             // validar que a competência está aberta antes de exportar
             if (!Competencia::referenciaAberta($competencia)) {
@@ -318,7 +316,7 @@ class PainelConferenciaController extends Controller
                 $resultado = $servico->gerar($competencia);
                 $idsExportados = $resultado['idsExportados']->toArray();
 
-                // Bulk update (sem N+1)
+
                 LancamentoSetorial::whereIn('id', $idsExportados)
                     ->update([
                         'status' => LancamentoStatus::EXPORTADO->value,

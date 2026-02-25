@@ -15,7 +15,7 @@
                 <select name="competencia" class="form-select" onchange="this.form.submit()">
                     @foreach($competencias as $comp)
                         <option value="{{ $comp }}" {{ $competenciaSelecionada == $comp ? 'selected' : '' }}>
-                            {{ \Carbon\Carbon::createFromFormat('m/Y', $comp)->format('M/Y') }}
+                            {{ \Carbon\Carbon::createFromFormat('Y-m', $comp)->translatedFormat('M/Y') }}
                         </option>
                     @endforeach
                 </select>

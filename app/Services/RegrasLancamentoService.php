@@ -58,7 +58,7 @@ class RegrasLancamentoService
         // 10. Adicional noturno e Dias noturnos
         $this->validarAdicionalNoturno($servidor, $evento, $dados);
         $this->validarTetoAdicionalNoturno($dados);
-        // FIXME: validarDiasNoturnos nao implementado
+
 
         // 11. Valor mínimo/máximo do evento
         $this->validarValorLimites($evento, $dados);
