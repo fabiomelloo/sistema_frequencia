@@ -1,6 +1,6 @@
-﻿<?php
+<?php
 
-
+namespace App\Services;
 
 use App\Models\LancamentoSetorial;
 use App\Models\Servidor;

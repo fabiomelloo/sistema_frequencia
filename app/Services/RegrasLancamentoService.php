@@ -457,7 +457,7 @@ class RegrasLancamentoService
         }
 
         $usuario = auth()->user();
-        $isAdmin = $usuario && clone $usuario->isAdmin(); // Assuming isAdmin() exists or check role
+        $isAdmin = $usuario && $usuario->role === \App\Enums\UserRole::ADMIN;
 
         $limiteRetroativo = (int) (\App\Models\Configuracao::get('meses_retroativos') ?? 3);
         $competenciaDate = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();

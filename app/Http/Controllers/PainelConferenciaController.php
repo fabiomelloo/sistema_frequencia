@@ -287,35 +287,11 @@ class PainelConferenciaController extends Controller
                     ->withErrors(['error' => 'Selecione uma competência para exportar.']);
             }
 
-            // validar que a competência está aberta antes de exportar
-            if (!Competencia::referenciaAberta($competencia)) {
-                return redirect()
-                    ->route('painel.index')
-                    ->withErrors(['error' => "A competência {$competencia} está fechada. Não é possível exportar."]);
-            }
-
-            // Verificar se há servidores inativos nos lançamentos a exportar
-            $lancamentosInvalidos = LancamentoSetorial::where('competencia', $competencia)
-                ->where('status', LancamentoStatus::CONFERIDO->value)
-                ->whereHas('servidor', function ($q) {
-                    $q->where('ativo', false);
-                })
-                ->with('servidor')
-                ->get();
-
-            if ($lancamentosInvalidos->isNotEmpty()) {
-                $nomes = $lancamentosInvalidos->pluck('servidor.nome')->implode(', ');
-                return redirect()
-                    ->route('painel.index')
-                    ->withErrors(['error' => "Existem lançamentos com servidores inativos: {$nomes}. Rejeite-os antes de exportar."]);
-            }
-
             $servico = app(GeradorTxtFolhaService::class);
 
             $nomeArquivo = DB::transaction(function () use ($servico, $competencia) {
                 $resultado = $servico->gerar($competencia);
                 $idsExportados = $resultado['idsExportados']->toArray();
-
 
                 LancamentoSetorial::whereIn('id', $idsExportados)
                     ->update([
@@ -345,7 +321,7 @@ class PainelConferenciaController extends Controller
 
             return redirect()
                 ->route('painel.index')
-                ->withErrors(['error' => 'Ocorreu um erro ao exportar os lançamentos. Tente novamente ou contacte o administrador.']);
+                ->withErrors(['error' => $e->getMessage()]);
         }
     }
 }

@@ -399,10 +399,22 @@ class LancamentoSetorialController extends Controller
 
         $user = auth()->user();
         $aprovados = 0;
+        $ignoradosSegregacao = 0;
 
         foreach ($request->lancamento_ids as $id) {
             $lancamento = LancamentoSetorial::find($id);
             if ($lancamento && $lancamento->isPendente() && $lancamento->setor_origem_id === $user->setor_id) {
+                // Segregação de função: criador não pode aprovar
+                $criadorId = \App\Models\AuditLog::where('modelo', 'LancamentoSetorial')
+                    ->where('modelo_id', $lancamento->id)
+                    ->where('acao', 'CRIOU')
+                    ->value('user_id');
+
+                if ($criadorId && $criadorId === $user->id) {
+                    $ignoradosSegregacao++;
+                    continue;
+                }
+
                 $lancamento->status = LancamentoStatus::CONFERIDO_SETORIAL;
                 $lancamento->conferido_setorial_por = $user->id;
                 $lancamento->conferido_setorial_em = now();
@@ -411,9 +423,14 @@ class LancamentoSetorialController extends Controller
             }
         }
 
+        $mensagem = "{$aprovados} lançamento(s) conferido(s) pelo setor!";
+        if ($ignoradosSegregacao > 0) {
+            $mensagem .= " ({$ignoradosSegregacao} ignorado(s) por segregação de função — você é o criador)";
+        }
+
         return redirect()
             ->back()
-            ->with('success', "{$aprovados} lançamento(s) conferido(s) pelo setor!");
+            ->with('success', $mensagem);
     }
 
     public function cancelar(LancamentoSetorial $lancamento): RedirectResponse

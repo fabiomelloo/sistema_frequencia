@@ -18,6 +18,13 @@ class GeradorTxtFolhaService
 
     public function gerar(?string $competencia = null): array
     {
+        // Validação de negócio: competência deve estar aberta
+        if ($competencia) {
+            if (!\App\Models\Competencia::referenciaAberta($competencia)) {
+                throw new Exception("A competência {$competencia} está fechada. Não é possível exportar.");
+            }
+        }
+
         $query = LancamentoSetorial::where('status', LancamentoStatus::CONFERIDO->value)
             ->with(['evento', 'servidor']);
 
@@ -30,6 +37,15 @@ class GeradorTxtFolhaService
         if ($lancamentos->isEmpty()) {
             throw new Exception('Nenhum lançamento conferido para exportação.' .
                 ($competencia ? " (competência: {$competencia})" : ''));
+        }
+
+        // Validação de negócio: servidores inativos bloqueiam exportação
+        $servidoresInativos = $lancamentos->filter(fn($l) => !$l->servidor->ativo);
+        if ($servidoresInativos->isNotEmpty()) {
+            $nomes = $servidoresInativos->pluck('servidor.nome')->unique()->implode(', ');
+            throw new Exception(
+                "Existem lançamentos com servidores inativos: {$nomes}. Rejeite-os antes de exportar."
+            );
         }
 
         $conteudo = '';

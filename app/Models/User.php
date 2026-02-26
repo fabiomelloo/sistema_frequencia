@@ -50,4 +50,19 @@ class User extends Authenticatable
     {
         return $this->role === \App\Enums\UserRole::SETORIAL;
     }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === \App\Enums\UserRole::ADMIN;
+    }
+
+    public function isGestor(): bool
+    {
+        return $this->role === \App\Enums\UserRole::GESTOR;
+    }
+
+    public function isAuditor(): bool
+    {
+        return $this->role === \App\Enums\UserRole::AUDITOR;
+    }
 }
