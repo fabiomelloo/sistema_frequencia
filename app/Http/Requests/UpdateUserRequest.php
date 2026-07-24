@@ -2,13 +2,17 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\UserRole;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Password;
 
 class UpdateUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        $user = $this->route('user');
+
+        return $user && ($this->user()?->can('update', $user) ?? false);
     }
 
     public function rules(): array
@@ -17,10 +21,10 @@ class UpdateUserRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email,' . $userId],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            'email' => ['required', 'email', 'unique:users,email,'.$userId],
+            'password' => ['nullable', 'confirmed', Password::defaults()],
             'setor_id' => ['required', 'exists:setores,id'],
-            'role' => ['required', 'in:' . implode(',', \App\Enums\UserRole::valores())],
+            'role' => ['required', 'in:'.implode(',', UserRole::valores())],
         ];
     }
 
@@ -32,7 +36,7 @@ class UpdateUserRequest extends FormRequest
             'email.required' => 'O email é obrigatório.',
             'email.email' => 'Digite um email válido.',
             'email.unique' => 'Este email já está cadastrado.',
-            'password.min' => 'A senha deve ter no mínimo 8 caracteres.',
+            'password.min' => 'A senha deve ter no mínimo 12 caracteres.',
             'password.confirmed' => 'As senhas não conferem.',
             'setor_id.required' => 'O setor é obrigatório.',
             'setor_id.exists' => 'Setor inválido.',

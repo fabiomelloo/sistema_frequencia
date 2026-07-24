@@ -1,11 +1,11 @@
 @extends('layouts.app')
 
 @section('title', 'Dashboard — Sistema de Frequência')
-@section('description', 'Painel do setor com visão geral dos lançamentos')
+@section('description', 'Painel do setor com acesso à frequência mensal e visão dos lançamentos')
 
 @section('content')
 <div class="mb-4">
-    <h4 class="fw-bold"><i class="bi bi-speedometer2 me-2"></i>Dashboard — {{ $setor->sigla ?? $setor->nome }}</h4>
+    <h1 class="h4 fw-bold"><i class="bi bi-speedometer2 me-2"></i>Dashboard — {{ $setor->sigla ?? $setor->nome }}</h1>
     <p class="text-muted mb-0">Competência atual: <strong>{{ $competenciaAtual }}</strong></p>
 </div>
 
@@ -56,8 +56,8 @@
                     <span class="fw-bold text-warning">{{ $contadoresMes['pendentes'] }}</span>
                 </div>
                 <div class="mt-3">
-                    <a href="{{ route('lancamentos.create') }}" class="btn btn-primary btn-sm w-100">
-                        <i class="bi bi-plus-circle me-1"></i> Novo Lançamento
+                    <a href="{{ route('frequencia.index') }}" class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-clipboard2-check me-1"></i> Preencher Frequência Mensal
                     </a>
                 </div>
             </div>

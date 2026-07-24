@@ -1,13 +1,20 @@
 <?php
+
 namespace App\Services;
 
-use App\Models\Servidor;
+use App\Enums\LancamentoStatus;
+use App\Enums\TipoEvento;
+use App\Enums\UserRole;
+use App\Models\Competencia;
+use App\Models\Configuracao;
 use App\Models\EventoFolha;
 use App\Models\LancamentoSetorial;
-use App\Models\Competencia;
-use App\Enums\TipoEvento;
-use InvalidArgumentException;
+use App\Models\Servidor;
+use App\Models\User;
+use App\Support\SystemDefaults;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class RegrasLancamentoService
 {
@@ -16,7 +23,8 @@ class RegrasLancamentoService
         EventoFolha $evento,
         array $dados,
         ?int $lancamentoId = null,
-        ?int $setorId = null
+        ?int $setorId = null,
+        ?User $usuario = null
     ): void {
         $competencia = $dados['competencia'] ?? now()->format('Y-m');
 
@@ -59,7 +67,6 @@ class RegrasLancamentoService
         $this->validarAdicionalNoturno($servidor, $evento, $dados);
         $this->validarTetoAdicionalNoturno($dados);
 
-
         // 11. Valor mínimo/máximo do evento
         $this->validarValorLimites($evento, $dados);
 
@@ -67,10 +74,16 @@ class RegrasLancamentoService
         $this->validarValorTotalServidor($servidor, $competencia, $dados, $lancamentoId);
 
         // 13. Retroatividade máxima
-        $this->validarRetroatividade($competencia, $dados, $lancamentoId);
+        $this->validarRetroatividade($competencia, $dados, $lancamentoId, $usuario);
 
-        // 14. Conflito turno/noturno
+        // 14. Conflito turno/noturno no mesmo lançamento
         $this->validarConflitoTurnoNoturno($dados);
+
+        // 15. Conflito turno/noturno entre lançamentos do mesmo servidor na competência
+        $this->validarConflitoTurnoNoturnoCruzado($servidor, $competencia, $dados, $lancamentoId);
+
+        // 16. Duplicata: mesmo servidor + evento + competência
+        $this->validarDuplicata($servidor, $evento, $competencia, $lancamentoId);
     }
 
     /**
@@ -78,10 +91,10 @@ class RegrasLancamentoService
      */
     private function validarEventoAtivo(EventoFolha $evento): void
     {
-        if (!$evento->ativo) {
+        if (! $evento->ativo) {
             throw new InvalidArgumentException(
-                "O evento \"{$evento->descricao}\" (código {$evento->codigo_evento}) está inativo. " .
-                "Não é possível criar lançamentos para eventos desativados."
+                "O evento \"{$evento->descricao}\" (código {$evento->codigo_evento}) está inativo. ".
+                'Não é possível criar lançamentos para eventos desativados.'
             );
         }
     }
@@ -91,10 +104,10 @@ class RegrasLancamentoService
      */
     private function validarAutorizacaoEvento(EventoFolha $evento, int $setorId): void
     {
-        if (!$evento->temDireitoNoSetor($setorId)) {
+        if (! $evento->temDireitoNoSetor($setorId)) {
             throw new InvalidArgumentException(
-                "O evento \"{$evento->descricao}\" não está autorizado para este setor. " .
-                "Solicite a liberação ao administrador."
+                "O evento \"{$evento->descricao}\" não está autorizado para este setor. ".
+                'Solicite a liberação ao administrador.'
             );
         }
     }
@@ -102,10 +115,12 @@ class RegrasLancamentoService
     private function validarCompetenciaAberta(string $competencia): void
     {
         $comp = Competencia::buscarPorReferencia($competencia);
-        
-        // Se não existe competência cadastrada, permitir (modo legado)
-        if (!$comp) {
-            return;
+
+        // Todo lançamento deve pertencer a uma competência cadastrada.
+        if (! $comp) {
+            throw new InvalidArgumentException(
+                "A competência {$competencia} não está cadastrada no sistema."
+            );
         }
 
         if ($comp->estaFechada()) {
@@ -123,13 +138,13 @@ class RegrasLancamentoService
 
     private function validarServidorAtivo(Servidor $servidor, string $competencia): void
     {
-        if (!$servidor->estaAtivoNaCompetencia($competencia)) {
+        if (! $servidor->estaAtivoNaCompetencia($competencia)) {
             $msg = "O servidor {$servidor->nome} não estava ativo na competência {$competencia}.";
-            
+
             if ($servidor->data_desligamento) {
                 $msg .= " Desligamento em {$servidor->data_desligamento->format('d/m/Y')}.";
             }
-            
+
             throw new InvalidArgumentException($msg);
         }
     }
@@ -142,7 +157,7 @@ class RegrasLancamentoService
             throw new InvalidArgumentException('Dias trabalhados é obrigatório para este evento.');
         }
 
-        if (!empty($diasTrabalhados)) {
+        if (! empty($diasTrabalhados)) {
             $diasNoMes = Carbon::createFromFormat('Y-m', $competencia)->daysInMonth;
             $diasMaximosPermitidos = $diasNoMes;
 
@@ -194,7 +209,7 @@ class RegrasLancamentoService
         }
 
         $diasJaLancados = LancamentoSetorial::somaDiasServidor($servidor->id, $competencia, $lancamentoId);
-        $diasUteisBase = \App\Models\Competencia::obterDiasUteis($competencia);
+        $diasUteisBase = Competencia::obterDiasUteis($competencia);
 
         // Subtrai dias de feriados e recessos locais parametrizados, se houver lógica adicional
         // Aqui já assumimos que obterDiasUteis() poderia descontar os feriados se implementado lá, senão usamos limite padrão.
@@ -202,7 +217,7 @@ class RegrasLancamentoService
 
         if ($diasLancados > $diasUteisBase) {
             throw new InvalidArgumentException(
-                "O número de dias trabalhados ({$diasLancados}) não pode exceder os dias úteis do mês ({$diasUteisBase} dias)."
+                "O número de dias trabalhados ({$diasLancados}) não pode exceder os dias úteis do período ({$diasUteisBase} dias)."
             );
         }
 
@@ -210,9 +225,9 @@ class RegrasLancamentoService
 
         if ($total > $diasUteisBase) { // Alterado para usar diasUteisBase
             throw new InvalidArgumentException(
-                "Limite de dias excedido para {$servidor->nome} na competência {$competencia}. " .
-                "Já lançados: {$diasJaLancados} dias. Informado: {$diasTrabalhados} dias. " .
-                "Total ({$total}) ultrapassa os {$diasUteisBase} dias úteis do mês."
+                "Limite de dias excedido para {$servidor->nome} na competência {$competencia}. ".
+                "Já lançados: {$diasJaLancados} dias. Informado: {$diasTrabalhados} dias. ".
+                "Total ({$total}) ultrapassa os {$diasUteisBase} dias úteis do período."
             );
         }
     }
@@ -238,19 +253,19 @@ class RegrasLancamentoService
         $porcentagemInsalubridade = $dados['porcentagem_insalubridade'] ?? null;
         $diasTrabalhados = $dados['dias_trabalhados'] ?? null;
 
-        if (!empty($porcentagemPericulosidade) && !empty($porcentagemInsalubridade)) {
+        if (! empty($porcentagemPericulosidade) && ! empty($porcentagemInsalubridade)) {
             throw new InvalidArgumentException(
                 'Periculosidade e insalubridade não podem coexistir.'
             );
         }
 
-        if (!empty($porcentagemPericulosidade) && empty($diasTrabalhados)) {
+        if (! empty($porcentagemPericulosidade) && empty($diasTrabalhados)) {
             throw new InvalidArgumentException(
                 'Periculosidade exige dias trabalhados.'
             );
         }
 
-        if (!empty($porcentagemPericulosidade) && $porcentagemPericulosidade !== 30) {
+        if (! empty($porcentagemPericulosidade) && $porcentagemPericulosidade !== 30) {
             throw new InvalidArgumentException(
                 'Porcentagem de periculosidade deve ser 30%.'
             );
@@ -262,15 +277,15 @@ class RegrasLancamentoService
         $porcentagemInsalubridade = $dados['porcentagem_insalubridade'] ?? null;
         $porcentagemPericulosidade = $dados['porcentagem_periculosidade'] ?? null;
 
-        if (!empty($porcentagemInsalubridade) && !empty($porcentagemPericulosidade)) {
+        if (! empty($porcentagemInsalubridade) && ! empty($porcentagemPericulosidade)) {
             throw new InvalidArgumentException(
                 'Insalubridade e periculosidade não podem coexistir.'
             );
         }
 
-        if (!empty($porcentagemInsalubridade)) {
+        if (! empty($porcentagemInsalubridade)) {
             $valoresPermitidos = [10, 20, 40];
-            if (!in_array($porcentagemInsalubridade, $valoresPermitidos)) {
+            if (! in_array($porcentagemInsalubridade, $valoresPermitidos)) {
                 throw new InvalidArgumentException(
                     'Porcentagem de insalubridade deve ser 10%, 20% ou 40%.'
                 );
@@ -293,10 +308,32 @@ class RegrasLancamentoService
             );
         }
 
-        if (!empty($valorGratificacao) && !empty($porcentagem)) {
+        if (! empty($valorGratificacao) && ! empty($porcentagem)) {
             throw new InvalidArgumentException(
                 'Gratificação não pode ter valor e porcentagem simultaneamente.'
             );
+        }
+
+        // Validação de intervalo da porcentagem
+        if (! empty($porcentagem)) {
+            $porcentagem = (float) $porcentagem;
+            if ($porcentagem <= 0 || $porcentagem > 100) {
+                throw new InvalidArgumentException(
+                    "Porcentagem de gratificação deve estar entre 0,01% e 100%. Informado: {$porcentagem}%."
+                );
+            }
+
+            // Validar também contra os limites min/max do evento, se configurados via porcentagem
+            if ($evento->valor_minimo && $porcentagem < $evento->valor_minimo) {
+                throw new InvalidArgumentException(
+                    "Porcentagem de gratificação ({$porcentagem}%) está abaixo do mínimo configurado para este evento ({$evento->valor_minimo}%)."
+                );
+            }
+            if ($evento->valor_maximo && $porcentagem > $evento->valor_maximo) {
+                throw new InvalidArgumentException(
+                    "Porcentagem de gratificação ({$porcentagem}%) está acima do máximo configurado para este evento ({$evento->valor_maximo}%)."
+                );
+            }
         }
     }
 
@@ -312,8 +349,8 @@ class RegrasLancamentoService
         $adicionalTurno = $dados['adicional_turno'] ?? null;
         $diasTrabalhados = $dados['dias_trabalhados'] ?? null;
 
-        if (!empty($adicionalTurno)) {
-            if (!$servidor->funcao_vigia) {
+        if (! empty($adicionalTurno)) {
+            if (! $servidor->funcao_vigia) {
                 throw new InvalidArgumentException(
                     'Adicional de turno permitido apenas para servidor com função de vigia.'
                 );
@@ -340,8 +377,8 @@ class RegrasLancamentoService
         $diasTrabalhados = $dados['dias_trabalhados'] ?? null;
         $diasNoturnos = $dados['dias_noturnos'] ?? null;
 
-        if (!empty($adicionalNoturno)) {
-            if (!$servidor->trabalha_noturno) {
+        if (! empty($adicionalNoturno)) {
+            if (! $servidor->trabalha_noturno) {
                 throw new InvalidArgumentException(
                     'Adicional noturno permitido apenas para servidor que trabalha à noite.'
                 );
@@ -353,7 +390,7 @@ class RegrasLancamentoService
                 );
             }
 
-            if (!empty($diasNoturnos) && !empty($diasTrabalhados)) {
+            if (! empty($diasNoturnos) && ! empty($diasTrabalhados)) {
                 if ($diasNoturnos > $diasTrabalhados) {
                     throw new InvalidArgumentException(
                         'Dias noturnos não podem ser maiores que dias trabalhados.'
@@ -365,18 +402,20 @@ class RegrasLancamentoService
 
     private function validarTetoAdicionalNoturno(array $dados): void
     {
-        if (!isset($dados['adicional_noturno']) || empty($dados['adicional_noturno'])) {
+        if (! isset($dados['adicional_noturno']) || empty($dados['adicional_noturno'])) {
             return;
         }
 
-        $tetoAdicionalNoturno = \App\Models\Configuracao::get('teto_adicional_noturno') ? (float) \App\Models\Configuracao::get('teto_adicional_noturno') : 500.00;
+        $tetoAdicionalNoturno = Configuracao::get('teto_adicional_noturno')
+            ? (float) Configuracao::get('teto_adicional_noturno')
+            : SystemDefaults::TETO_ADICIONAL_NOTURNO;
 
         $valor = (float) $dados['adicional_noturno'];
 
         if ($valor > $tetoAdicionalNoturno) {
             throw new InvalidArgumentException(
-                "O valor do Adicional Noturno (R$ " . number_format($valor, 2, ',', '.') . ") " .
-                "excede o teto permitido de R$ " . number_format($tetoAdicionalNoturno, 2, ',', '.') . "."
+                'O valor do Adicional Noturno (R$ '.number_format($valor, 2, ',', '.').') '.
+                'excede o teto permitido de R$ '.number_format($tetoAdicionalNoturno, 2, ',', '.').'.'
             );
         }
     }
@@ -393,17 +432,17 @@ class RegrasLancamentoService
 
         if ($evento->valor_minimo && $valorTotal < $evento->valor_minimo) {
             throw new InvalidArgumentException(
-                "O valor R\$ " . number_format($valorTotal, 2, ',', '.') . 
-                " está abaixo do mínimo permitido de R\$ " . number_format($evento->valor_minimo, 2, ',', '.') . 
-                " para este evento."
+                'O valor R$ '.number_format($valorTotal, 2, ',', '.').
+                ' está abaixo do mínimo permitido de R$ '.number_format($evento->valor_minimo, 2, ',', '.').
+                ' para este evento.'
             );
         }
 
         if ($evento->valor_maximo && $valorTotal > $evento->valor_maximo) {
             throw new InvalidArgumentException(
-                "O valor R\$ " . number_format($valorTotal, 2, ',', '.') . 
-                " está acima do máximo permitido de R\$ " . number_format($evento->valor_maximo, 2, ',', '.') . 
-                " para este evento."
+                'O valor R$ '.number_format($valorTotal, 2, ',', '.').
+                ' está acima do máximo permitido de R$ '.number_format($evento->valor_maximo, 2, ',', '.').
+                ' para este evento.'
             );
         }
     }
@@ -413,7 +452,7 @@ class RegrasLancamentoService
      */
     private function validarValorTotalServidor(Servidor $servidor, string $competencia, array $dados, ?int $lancamentoId): void
     {
-        $limiteTotal = \App\Models\Configuracao::get('limite_valor_total_servidor');
+        $limiteTotal = Configuracao::get('limite_valor_total_servidor');
         if (empty($limiteTotal)) {
             return; // Sem limite configurado, pula validação
         }
@@ -427,7 +466,11 @@ class RegrasLancamentoService
 
         $query = LancamentoSetorial::where('servidor_id', $servidor->id)
             ->where('competencia', $competencia)
-            ->whereNotIn('status', [\App\Enums\LancamentoStatus::REJEITADO->value, \App\Enums\LancamentoStatus::ESTORNADO->value]);
+            ->whereNotIn('status', [
+                LancamentoStatus::REJEITADO->value,
+                LancamentoStatus::ESTORNADO->value,
+                LancamentoStatus::CANCELADO->value,
+            ]);
 
         if ($lancamentoId) {
             $query->where('id', '!=', $lancamentoId);
@@ -437,9 +480,9 @@ class RegrasLancamentoService
 
         if (($valorAcumulado + $valorAtual) > $limiteTotal) {
             throw new InvalidArgumentException(
-                "O valor total acumulado do servidor {$servidor->nome} nesta competência seria de R\$ " .
-                number_format($valorAcumulado + $valorAtual, 2, ',', '.') .
-                ", ultrapassando o limite de R\$ " . number_format($limiteTotal, 2, ',', '.') . "."
+                "O valor total acumulado do servidor {$servidor->nome} nesta competência seria de R\$ ".
+                number_format($valorAcumulado + $valorAtual, 2, ',', '.').
+                ', ultrapassando o limite de R$ '.number_format($limiteTotal, 2, ',', '.').'.'
             );
         }
     }
@@ -448,59 +491,66 @@ class RegrasLancamentoService
      * Regra #14: Limite de retroatividade e Controle Orçamentário.
      * Lançamentos comuns podem ser feitos para até X meses retroativos.
      * Lançamentos retroativos consomem um orçamento limite configurado.
+     *
+     * @param  ?User  $usuario  Usuário que está realizando o lançamento.
+     *                          Se null, cai no auth()->user() como fallback (compatibilidade).
      */
-    private function validarRetroatividade(string $competencia, array $dados = [], ?int $lancamentoId = null): void
+    private function validarRetroatividade(string $competencia, array $dados = [], ?int $lancamentoId = null, ?User $usuario = null): void
     {
         $hoje = now()->format('Y-m');
         if ($competencia >= $hoje) {
             return; // Não é retroativo
         }
 
-        $usuario = auth()->user();
-        $isAdmin = $usuario && $usuario->role === \App\Enums\UserRole::ADMIN;
+        $usuario = $usuario ?? auth()->user();
+        $isAdmin = $usuario && $usuario->role === UserRole::ADMIN;
 
-        $limiteRetroativo = (int) (\App\Models\Configuracao::get('meses_retroativos') ?? 3);
+        $limiteRetroativo = (int) (Configuracao::get('meses_retroativos') ?? SystemDefaults::MESES_RETROATIVOS);
         $competenciaDate = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
         $limiteDate = now()->subMonths($limiteRetroativo)->startOfMonth();
 
         // 1. Barreira Temporal
         if ($competenciaDate->lt($limiteDate)) {
             // Apenas admins podem lançar além do limite retroativo
-            if (!$isAdmin) {
+            if (! $isAdmin) {
                 throw new InvalidArgumentException(
-                    "A competência {$competencia} é anterior ao limite retroativo de {$limiteRetroativo} meses. " .
-                    "Apenas administradores podem realizar lançamentos tão antigos."
+                    "A competência {$competencia} é anterior ao limite retroativo de {$limiteRetroativo} meses. ".
+                    'Apenas administradores podem realizar lançamentos tão antigos.'
                 );
             }
         }
 
         // 2. Barreira Financeira/Orçamentária (Apenas para retroativos)
-        $limiteOrcamento = \App\Models\Configuracao::get('limite_orcamento_retroativo');
+        $limiteOrcamento = Configuracao::get('limite_orcamento_retroativo');
         if ($limiteOrcamento) {
             $limiteOrcamento = (float) $limiteOrcamento;
             $valorLancamento = (float) ($dados['valor'] ?? $dados['valor_gratificacao'] ?? 0);
-            
+
             if ($valorLancamento > 0) {
                 // Soma todos os lançamentos retroativos feitos no mês atual
                 $mesAtual = now()->format('Y-m');
-                
-                $query = \App\Models\LancamentoSetorial::where('competencia', '<', $mesAtual)
+
+                $query = LancamentoSetorial::where('competencia', '<', $mesAtual)
                     ->whereYear('created_at', now()->year)
                     ->whereMonth('created_at', now()->month)
-                    ->whereNotIn('status', [\App\Enums\LancamentoStatus::REJEITADO->value, \App\Enums\LancamentoStatus::ESTORNADO->value]);
-                
+                    ->whereNotIn('status', [
+                        LancamentoStatus::REJEITADO->value,
+                        LancamentoStatus::ESTORNADO->value,
+                        LancamentoStatus::CANCELADO->value,
+                    ]);
+
                 if ($lancamentoId) {
                     $query->where('id', '!=', $lancamentoId);
                 }
-                
-                $totalConsumido = (float) $query->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(valor, 0) + COALESCE(valor_gratificacao, 0)'));
-                
+
+                $totalConsumido = (float) $query->sum(DB::raw('COALESCE(valor, 0) + COALESCE(valor_gratificacao, 0)'));
+
                 if (($totalConsumido + $valorLancamento) > $limiteOrcamento) {
                     throw new InvalidArgumentException(
-                        "O valor deste lançamento (R$ " . number_format($valorLancamento, 2, ',', '.') . ") " .
-                        "ultrapassa o orçamento disponível para pagamentos retroativos neste mês. " .
-                        "Orçamento total: R$ " . number_format($limiteOrcamento, 2, ',', '.') . ". " .
-                        "Já consumido: R$ " . number_format($totalConsumido, 2, ',', '.') . "."
+                        'O valor deste lançamento (R$ '.number_format($valorLancamento, 2, ',', '.').') '.
+                        'ultrapassa o orçamento disponível para pagamentos retroativos neste mês. '.
+                        'Orçamento total: R$ '.number_format($limiteOrcamento, 2, ',', '.').'. '.
+                        'Já consumido: R$ '.number_format($totalConsumido, 2, ',', '.').'.'
                     );
                 }
             }
@@ -515,12 +565,78 @@ class RegrasLancamentoService
         $adicionalTurno = $dados['adicional_turno'] ?? null;
         $adicionalNoturno = $dados['adicional_noturno'] ?? null;
 
-        if (!empty($adicionalTurno) && !empty($adicionalNoturno)) {
+        if (! empty($adicionalTurno) && ! empty($adicionalNoturno)) {
             throw new InvalidArgumentException(
-                'Adicional de turno e adicional noturno não podem coexistir no mesmo lançamento. ' .
+                'Adicional de turno e adicional noturno não podem coexistir no mesmo lançamento. '.
                 'Crie lançamentos separados para cada adicional.'
             );
         }
     }
 
+    /**
+     * Regra #16: Conflito turno/noturno entre lançamentos distintos do mesmo servidor na competência.
+     * Um servidor não pode ter adicional_turno em um lançamento e adicional_noturno em outro
+     * dentro da mesma competência.
+     */
+    private function validarConflitoTurnoNoturnoCruzado(
+        Servidor $servidor,
+        string $competencia,
+        array $dados,
+        ?int $lancamentoId
+    ): void {
+        $temTurnoNovo = ! empty($dados['adicional_turno']);
+        $temNoturnoNovo = ! empty($dados['adicional_noturno']);
+
+        if (! $temTurnoNovo && ! $temNoturnoNovo) {
+            return; // Lançamento sem adicional, nenhum conflito possível
+        }
+
+        $query = LancamentoSetorial::where('servidor_id', $servidor->id)
+            ->where('competencia', $competencia)
+            ->whereNotIn('status', [
+                LancamentoStatus::REJEITADO->value,
+                LancamentoStatus::ESTORNADO->value,
+                LancamentoStatus::CANCELADO->value,
+            ]);
+
+        if ($lancamentoId) {
+            $query->where('id', '!=', $lancamentoId);
+        }
+
+        $existentes = $query->get(['adicional_turno', 'adicional_noturno']);
+
+        foreach ($existentes as $existente) {
+            if ($temTurnoNovo && ! empty($existente->adicional_noturno)) {
+                throw new InvalidArgumentException(
+                    'Servidor já possui lançamento com adicional noturno nesta competência. '.
+                    'Adicional de turno e adicional noturno não podem coexistir na mesma competência.'
+                );
+            }
+            if ($temNoturnoNovo && ! empty($existente->adicional_turno)) {
+                throw new InvalidArgumentException(
+                    'Servidor já possui lançamento com adicional de turno nesta competência. '.
+                    'Adicional noturno e adicional de turno não podem coexistir na mesma competência.'
+                );
+            }
+        }
+    }
+
+    /**
+     * Regra #17: Impede duplicata de servidor + evento + competência.
+     * Evita dois lançamentos idênticos no mesmo mês para o mesmo servidor.
+     */
+    private function validarDuplicata(
+        Servidor $servidor,
+        EventoFolha $evento,
+        string $competencia,
+        ?int $lancamentoId
+    ): void {
+        if (LancamentoSetorial::existeDuplicata($servidor->id, $evento->id, $competencia, $lancamentoId)) {
+            throw new InvalidArgumentException(
+                "Já existe um lançamento ativo para {$servidor->nome} com o evento \"".
+                "{$evento->descricao}\" na competência {$competencia}. ".
+                'Edite o lançamento existente em vez de criar um novo.'
+            );
+        }
+    }
 }

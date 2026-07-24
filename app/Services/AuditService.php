@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\AuditLog;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Str;
 
 class AuditService
 {
@@ -19,18 +21,41 @@ class AuditService
         ?array $dadosAntes = null,
         ?array $dadosDepois = null
     ): AuditLog {
-        return AuditLog::create([
-            'user_id' => Auth::id(),
-            'user_name' => Auth::user()?->name ?? 'Sistema',
-            'acao' => $acao,
-            'modelo' => $modelo,
-            'modelo_id' => $modeloId,
-            'descricao' => $descricao,
-            'dados_antes' => $dadosAntes,
-            'dados_depois' => $dadosDepois,
-            'ip' => Request::ip(),
-            'user_agent' => Request::userAgent(),
-        ]);
+        return DB::transaction(function () use ($acao, $modelo, $modeloId, $descricao, $dadosAntes, $dadosDepois): AuditLog {
+            $estado = DB::table('audit_chain_state')->where('id', 1)->lockForUpdate()->first();
+            if (! $estado) {
+                throw new \RuntimeException('O estado da cadeia de auditoria nao esta disponivel.');
+            }
+
+            $instante = now()->startOfSecond();
+            $registro = AuditLog::create([
+                'uuid' => (string) Str::uuid(),
+                'user_id' => Auth::id(),
+                'user_name' => Auth::user()?->name ?? 'Sistema',
+                'acao' => $acao,
+                'modelo' => $modelo,
+                'modelo_id' => $modeloId,
+                'descricao' => $descricao,
+                'dados_antes' => $dadosAntes,
+                'dados_depois' => $dadosDepois,
+                'ip' => Request::ip(),
+                'user_agent' => Request::userAgent(),
+                'hash_registro' => str_repeat('0', 64),
+                'hash_anterior' => $estado->ultimo_hash,
+                'created_at' => $instante,
+                'updated_at' => $instante,
+            ]);
+
+            $registroBanco = DB::table('audit_logs')->where('id', $registro->id)->first();
+            $hash = app(AuditIntegrityService::class)->calcularHash($registroBanco);
+            DB::table('audit_logs')->where('id', $registro->id)->update(['hash_registro' => $hash]);
+            DB::table('audit_chain_state')->where('id', 1)->update([
+                'ultimo_hash' => $hash,
+                'updated_at' => $instante,
+            ]);
+
+            return $registro->fresh();
+        }, 3);
     }
 
     /**
@@ -51,9 +76,9 @@ class AuditService
         return self::registrar('EXCLUIU', $modelo, $id, $descricao, $dados, null);
     }
 
-    public static function aprovou(string $modelo, int $id, ?string $descricao = null): AuditLog
+    public static function aprovou(string $modelo, int $id, ?string $descricao = null, ?array $dadosAntes = null, ?array $dadosDepois = null): AuditLog
     {
-        return self::registrar('APROVOU', $modelo, $id, $descricao);
+        return self::registrar('APROVOU', $modelo, $id, $descricao, $dadosAntes, $dadosDepois);
     }
 
     public static function rejeitou(string $modelo, int $id, ?string $descricao = null): AuditLog
@@ -104,7 +129,7 @@ class AuditService
         }
 
         $camposAlterados = array_keys($diff['antes']);
-        $descFinal = $descricao ?? 'Campos alterados: ' . implode(', ', $camposAlterados);
+        $descFinal = $descricao ?? 'Campos alterados: '.implode(', ', $camposAlterados);
 
         return self::registrar('EDITOU', $modelo, $id, $descFinal, $diff['antes'], $diff['depois']);
     }

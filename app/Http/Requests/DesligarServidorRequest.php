@@ -8,7 +8,9 @@ class DesligarServidorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        $servidor = $this->route('servidor');
+
+        return $servidor && ($this->user()?->can('update', $servidor) ?? false);
     }
 
     public function rules(): array
@@ -54,6 +56,7 @@ class DesligarServidorRequest extends FormRequest
         if ($this->motivo === 'OUTRO') {
             return $this->motivo_detalhado ?? 'Outro motivo';
         }
+
         return $this->motivo;
     }
 }

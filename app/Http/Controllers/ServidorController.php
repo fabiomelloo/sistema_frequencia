@@ -2,26 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\LancamentoStatus;
+use App\Enums\VinculoServidor;
+use App\Http\Requests\DesligarServidorRequest;
+use App\Http\Requests\StoreServidorRequest;
+use App\Http\Requests\TransferirServidorRequest;
+use App\Http\Requests\UpdateServidorRequest;
+use App\Models\LancamentoSetorial;
 use App\Models\Servidor;
 use App\Models\Setor;
-use App\Services\ServidorCicloVidaService;
 use App\Services\AuditService;
-use App\Http\Requests\TransferirServidorRequest;
-use App\Http\Requests\DesligarServidorRequest;
-use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
+use App\Services\HistoricoFuncionalService;
+use App\Services\ServidorCicloVidaService;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class ServidorController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware('role:CENTRAL');
+        $this->middleware('role:CENTRAL|ADMIN');
     }
 
     public function index(): View
     {
+        $this->authorize('viewAny', Servidor::class);
+
         $servidores = Servidor::with('setor')
             ->orderBy('nome')
             ->paginate(20);
@@ -33,16 +41,21 @@ class ServidorController extends Controller
 
     public function create(): View
     {
+        $this->authorize('create', Servidor::class);
+
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
 
         return view('admin.servidores.create', [
             'setores' => $setores,
+            'tiposVinculo' => VinculoServidor::cases(),
         ]);
     }
 
-    public function store(\App\Http\Requests\StoreServidorRequest $request): RedirectResponse
-    {
-        Servidor::create($request->validated());
+    public function store(
+        StoreServidorRequest $request,
+        HistoricoFuncionalService $service
+    ): RedirectResponse {
+        $service->cadastrarServidor($request->validated(), $request->user()->id);
 
         return redirect()
             ->route('admin.servidores.index')
@@ -51,6 +64,8 @@ class ServidorController extends Controller
 
     public function show(Servidor $servidor): View
     {
+        $this->authorize('view', $servidor);
+
         $servidor->load(['setor', 'lancamentos.evento', 'lancamentos.setorOrigem']);
 
         AuditService::leu('Servidor', $servidor->id, "Visualizou os detalhes e lançamentos do servidor: {$servidor->nome}");
@@ -62,6 +77,8 @@ class ServidorController extends Controller
 
     public function edit(Servidor $servidor): View
     {
+        $this->authorize('update', $servidor);
+
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
 
         return view('admin.servidores.edit', [
@@ -70,7 +87,7 @@ class ServidorController extends Controller
         ]);
     }
 
-    public function update(\App\Http\Requests\UpdateServidorRequest $request, Servidor $servidor): RedirectResponse
+    public function update(UpdateServidorRequest $request, Servidor $servidor): RedirectResponse
     {
         $servidor->update($request->validated());
 
@@ -81,6 +98,8 @@ class ServidorController extends Controller
 
     public function destroy(Servidor $servidor): RedirectResponse
     {
+        $this->authorize('delete', $servidor);
+
         if ($servidor->lancamentos()->count() > 0) {
             return redirect()
                 ->route('admin.servidores.index')
@@ -99,18 +118,15 @@ class ServidorController extends Controller
     /**
      * Ativa um servidor previamente desativado.
      */
-    public function ativar(Servidor $servidor): RedirectResponse
+    public function ativar(Servidor $servidor, ServidorCicloVidaService $service): RedirectResponse
     {
-        $servidor->ativo = true;
-        $servidor->data_desligamento = null;
-        $servidor->save();
+        $this->authorize('update', $servidor);
 
-        AuditService::registrar(
-            'ATIVOU_SERVIDOR',
-            'Servidor',
-            $servidor->id,
-            "Servidor reativado: {$servidor->nome}"
-        );
+        try {
+            $service->reativarServidor($servidor, now()->startOfDay(), auth()->id());
+        } catch (\InvalidArgumentException $exception) {
+            return back()->withErrors(['reativacao' => $exception->getMessage()]);
+        }
 
         return redirect()
             ->route('admin.servidores.show', $servidor)
@@ -122,6 +138,8 @@ class ServidorController extends Controller
      */
     public function formTransferir(Servidor $servidor): View
     {
+        $this->authorize('update', $servidor);
+
         $setores = Setor::where('ativo', true)
             ->where('id', '!=', $servidor->setor_id)
             ->orderBy('nome')
@@ -143,7 +161,7 @@ class ServidorController extends Controller
     ): RedirectResponse {
         try {
             $validated = $request->validated();
-            
+
             $resultado = $service->transferirServidor(
                 $servidor,
                 $validated['novo_setor_id'],
@@ -151,11 +169,11 @@ class ServidorController extends Controller
                 $validated['motivo'] ?? null
             );
 
-            $mensagem = "Servidor transferido com sucesso! ";
+            $mensagem = 'Servidor transferido com sucesso! ';
             $mensagem .= "{$resultado['lancamentos_afetados']} lançamento(s) pendente(s) ";
-            $mensagem .= $resultado['acao'] === 'transferidos' 
-                ? "foram transferidos para o novo setor."
-                : "permanecem no setor de origem.";
+            $mensagem .= $resultado['acao'] === 'transferidos'
+                ? 'foram transferidos para o novo setor.'
+                : 'permanecem no setor de origem.';
 
             return redirect()
                 ->route('admin.servidores.show', $servidor)
@@ -174,13 +192,15 @@ class ServidorController extends Controller
      */
     public function formDesligar(Servidor $servidor): View
     {
+        $this->authorize('update', $servidor);
+
         // Buscar lançamentos que serão afetados
         $competenciaAtual = now()->format('Y-m');
-        $lancamentosAfetados = \App\Models\LancamentoSetorial::where('servidor_id', $servidor->id)
+        $lancamentosAfetados = LancamentoSetorial::where('servidor_id', $servidor->id)
             ->whereIn('status', [
-                \App\Enums\LancamentoStatus::PENDENTE,
-                \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL,
-                \App\Enums\LancamentoStatus::REJEITADO,
+                LancamentoStatus::PENDENTE,
+                LancamentoStatus::CONFERIDO_SETORIAL,
+                LancamentoStatus::REJEITADO,
             ])
             ->where('competencia', '>=', $competenciaAtual)
             ->count();
@@ -201,14 +221,14 @@ class ServidorController extends Controller
     ): RedirectResponse {
         try {
             $validated = $request->validated();
-            
+
             $resultado = $service->desligarServidor(
                 $servidor,
                 Carbon::parse($validated['data_desligamento']),
                 $request->getMotivoFinal()
             );
 
-            $mensagem = "Servidor desligado com sucesso! ";
+            $mensagem = 'Servidor desligado com sucesso! ';
             $mensagem .= "{$resultado['lancamentos_cancelados']} lançamento(s) cancelado(s). ";
             $mensagem .= "{$resultado['setores_notificados']} setor(es) notificado(s).";
 

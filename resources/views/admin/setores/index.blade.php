@@ -9,9 +9,11 @@
             <h1><i class="bi bi-building"></i> Gerenciar Setores</h1>
         </div>
         <div class="col-md-4 text-end">
+            @can('create', \App\Models\Setor::class)
             <a href="{{ route('admin.setores.create') }}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> Novo Setor
             </a>
+            @endcan
         </div>
     </div>
 
@@ -37,6 +39,8 @@
                         <tr>
                             <th>Nome</th>
                             <th>Sigla</th>
+                            <th>Código</th>
+                            <th>Unidade superior</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
@@ -46,6 +50,8 @@
                             <tr>
                                 <td>{{ $setor->nome }}</td>
                                 <td><span class="badge bg-secondary">{{ $setor->sigla }}</span></td>
+                                <td>{{ $setor->codigo_externo ?: '—' }}</td>
+                                <td>{{ $setor->setorPai?->nome ?? '—' }}</td>
                                 <td>
                                     @if ($setor->ativo)
                                         <span class="badge bg-success">Ativo</span>
@@ -57,9 +63,12 @@
                                     <a href="{{ route('admin.setores.show', $setor) }}" class="btn btn-sm btn-info">
                                         <i class="bi bi-eye"></i> Ver
                                     </a>
+                                    @can('update', $setor)
                                     <a href="{{ route('admin.setores.edit', $setor) }}" class="btn btn-sm btn-warning">
                                         <i class="bi bi-pencil"></i> Editar
                                     </a>
+                                    @endcan
+                                    @can('delete', $setor)
                                     <form action="{{ route('admin.setores.destroy', $setor) }}" method="POST" style="display:inline;" onsubmit="return confirm('Tem certeza?')">
                                         @csrf
                                         @method('DELETE')
@@ -67,11 +76,12 @@
                                             <i class="bi bi-trash"></i> Deletar
                                         </button>
                                     </form>
+                                    @endcan
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="4" class="text-center text-muted py-4">Nenhum setor encontrado.</td>
+                                <td colspan="6" class="text-center text-muted py-4">Nenhum setor encontrado.</td>
                             </tr>
                         @endforelse
                     </tbody>

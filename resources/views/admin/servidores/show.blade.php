@@ -13,6 +13,9 @@
                 <a href="{{ route('admin.servidores.edit', $servidor) }}" class="btn btn-warning">
                     <i class="bi bi-pencil"></i> Editar
                 </a>
+                <a href="{{ route('admin.servidores.historico', $servidor) }}" class="btn btn-primary">
+                    <i class="bi bi-clock-history" aria-hidden="true"></i> Histórico funcional
+                </a>
                 @if ($servidor->ativo)
                     <a href="{{ route('admin.servidores.transferir.form', $servidor) }}" class="btn btn-info">
                         <i class="bi bi-arrow-left-right"></i> Transferir
@@ -46,6 +49,9 @@
                     <p><strong>CPF:</strong> {{ $servidor->cpf_formatado }}</p>
                     <p><strong>Nome:</strong> {{ $servidor->nome }}</p>
                     <p><strong>Setor:</strong> {{ $servidor->setor->nome ?? 'N/A' }}</p>
+                    <p><strong>Vínculo:</strong> {{ $servidor->vinculo?->label() ?? 'Não informado' }}</p>
+                    <p><strong>Cargo:</strong> {{ $servidor->cargo ?? 'Não informado' }}</p>
+                    <p><strong>Carga horária:</strong> {{ $servidor->carga_horaria ? $servidor->carga_horaria.'h semanais' : 'Não informada' }}</p>
                     <p><strong>Origem:</strong> {{ $servidor->origem_registro ?? 'N/A' }}</p>
                     <p><strong>Status:</strong> 
                         @if ($servidor->ativo)

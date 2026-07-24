@@ -1,0 +1,193 @@
+/*
+ * Sistema Frequência — Estilos principais
+ * Extraído do layout app.blade.php para permitir cache do navegador e manutenção centralizada.
+ */
+
+:root {
+    --primary-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    --accent-color: #3b82f6;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --bg-color: #f8fafc;
+    --text-main: #334155;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body {
+    background-color: var(--bg-color);
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-main);
+    font-size: 0.95rem;
+    -webkit-font-smoothing: antialiased;
+}
+
+.navbar {
+    background: var(--primary-gradient) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    padding: 0.6rem 1rem;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.5px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.main-content {
+    padding-top: 32px;
+    padding-bottom: 48px;
+    min-height: calc(100vh - 140px);
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+.card {
+    border: 1px solid rgba(0,0,0,0.04);
+    border-radius: 16px;
+    box-shadow: var(--card-shadow);
+    transition: var(--transition-smooth);
+    background: #ffffff;
+}
+
+.card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-2px);
+}
+
+.table th {
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+}
+
+.badge {
+    font-weight: 500;
+    padding: 0.4em 0.75em;
+    border-radius: 6px;
+}
+
+.btn {
+    border-radius: 10px;
+    font-weight: 500;
+    transition: var(--transition-smooth);
+    padding: 0.5rem 1rem;
+    letter-spacing: 0.2px;
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.btn-primary:hover {
+    background-color: #2563eb;
+    border-color: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+footer {
+    background: #fff !important;
+    box-shadow: 0 -1px 4px rgba(0,0,0,0.04);
+}
+
+/* ===== Notificações ===== */
+.notification-badge {
+    position: absolute;
+    top: 2px;
+    right: 0px;
+    background: #dc3545;
+    color: white;
+    font-size: 0.65rem;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+}
+
+.notification-dropdown {
+    width: 340px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.notification-item {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.15s;
+}
+
+.notification-item:hover {
+    background: #f8f9fa;
+}
+
+.notification-item.unread {
+    border-left: 3px solid var(--accent-color);
+    background: #f0f7ff;
+}
+
+/* ===== Stat Cards (Dashboard) ===== */
+.stat-card {
+    border-radius: 12px;
+    padding: 1.25rem;
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+}
+
+.stat-card .stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.stat-card .stat-label {
+    font-size: 0.8rem;
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ===== Filter Card ===== */
+.filter-card {
+    border-radius: 12px;
+    background: white;
+    border: 1px solid #e9ecef;
+}
+
+.filter-card .card-body {
+    padding: 1rem;
+}
+
+/* ===== Responsividade ===== */
+@media (max-width: 768px) {
+    .stat-card .stat-number { font-size: 1.5rem; }
+    .notification-dropdown  { width: 280px; }
+}

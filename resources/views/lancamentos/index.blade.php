@@ -6,13 +6,10 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>Meus Lançamentos</h4>
+        <h1 class="h4 fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>Meus Lançamentos</h1>
         <p class="text-muted mb-0 small">Gerencie e aprove os lançamentos da sua equipe.</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="{{ route('lancamentos.importar.form') }}" class="btn btn-outline-info rounded-pill px-3 shadow-sm">
-            <i class="bi bi-upload me-1"></i> Importar CSV
-        </a>
         <a href="{{ route('lancamentos.lixeira') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
             <i class="bi bi-trash me-1"></i> Lixeira
         </a>
@@ -157,8 +154,10 @@
                             <td class="text-end pe-4">
                                 <div class="btn-group shadow-sm rounded-pill">
                                     @if ($lancamento->status->value === 'PENDENTE')
-                                        <button type="button" class="btn btn-sm btn-outline-success" 
-                                                onclick="aprovarUm({{ $lancamento->id }}, this)" 
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-success btn-aprovar"
+                                                data-url="{{ route('lancamentos.aprovar-setorial', $lancamento) }}"
+                                                data-confirm="Aprovar este lançamento?"
                                                 title="Aprovar">
                                             <i class="bi bi-check-lg icon-action"></i>
                                             <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
@@ -170,8 +169,10 @@
                                             <i class="bi bi-pencil"></i>
                                         </a>
 
-                                        <button type="button" class="btn btn-sm btn-outline-danger" 
-                                                onclick="deletarUm({{ $lancamento->id }}, this)"
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger btn-deletar"
+                                                data-url="{{ route('lancamentos.destroy', $lancamento) }}"
+                                                data-confirm="Tem certeza que deseja excluir este lançamento?"
                                                 title="Excluir">
                                             <i class="bi bi-trash icon-action"></i>
                                             <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
@@ -215,8 +216,9 @@
 @section('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const checkAll = document.getElementById('checkAll');
-        const itemChecks = document.querySelectorAll('.item-check');
+        // ── Checkboxes em lote ──────────────────────────────────────────
+        const checkAll    = document.getElementById('checkAll');
+        const itemChecks  = document.querySelectorAll('.item-check');
         const bulkActions = document.getElementById('bulkActions');
         const selectedCount = document.getElementById('selectedCount');
 
@@ -231,35 +233,40 @@
             updateBulkActions();
         });
 
-        itemChecks.forEach(check => {
-            check.addEventListener('change', updateBulkActions);
+        itemChecks.forEach(check => check.addEventListener('change', updateBulkActions));
+
+        // ── Botões de ação via data-* (sem interpolação inline) ─────────
+        function showSpinner(btn) {
+            const icon    = btn.querySelector('.icon-action');
+            const spinner = btn.querySelector('.spinner-action');
+            if (icon)    icon.classList.add('d-none');
+            if (spinner) spinner.classList.remove('d-none');
+            btn.disabled = true;
+        }
+
+        // Deletar
+        document.querySelectorAll('.btn-deletar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (confirm(this.dataset.confirm)) {
+                    showSpinner(this);
+                    const form = document.getElementById('deleteForm');
+                    form.action = this.dataset.url;
+                    form.submit();
+                }
+            });
+        });
+
+        // Aprovar individual
+        document.querySelectorAll('.btn-aprovar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (confirm(this.dataset.confirm)) {
+                    showSpinner(this);
+                    const form = document.getElementById('approveForm');
+                    form.action = this.dataset.url;
+                    form.submit();
+                }
+            });
         });
     });
-
-    function deletarUm(id, btn) {
-        if(confirm('Tem certeza que deseja excluir este lançamento?')) {
-            showSpinner(btn);
-            const form = document.getElementById('deleteForm');
-            form.action = `/lancamentos/${id}`;
-            form.submit();
-        }
-    }
-
-    function aprovarUm(id, btn) {
-        if(confirm('Aprovar este lançamento?')) {
-            showSpinner(btn);
-            const form = document.getElementById('approveForm');
-            form.action = `/lancamentos/${id}/aprovar-setorial`;
-            form.submit();
-        }
-    }
-
-    function showSpinner(btn) {
-        const icon = btn.querySelector('.icon-action');
-        const spinner = btn.querySelector('.spinner-action');
-        if (icon) icon.classList.add('d-none');
-        if (spinner) spinner.classList.remove('d-none');
-        btn.disabled = true;
-    }
 </script>
 @endsection

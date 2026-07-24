@@ -2,13 +2,15 @@
 
 namespace App\Services;
 
-use App\Models\Competencia;
-use App\Models\LancamentoSetorial;
-use App\Models\Configuracao;
 use App\Enums\CompetenciaStatus;
 use App\Enums\LancamentoStatus;
+use App\Enums\UserRole;
+use App\Models\Competencia;
+use App\Models\Configuracao;
+use App\Models\LancamentoSetorial;
+use App\Models\User;
+use App\Support\SystemDefaults;
 use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
 
 class CompetenciaService
 {
@@ -18,7 +20,7 @@ class CompetenciaService
     public function abrir(string $referencia, ?string $dataLimite = null): Competencia
     {
         $existente = Competencia::buscarPorReferencia($referencia);
-        
+
         if ($existente && $existente->estaAberta()) {
             throw new \InvalidArgumentException("A competência {$referencia} já está aberta.");
         }
@@ -31,18 +33,24 @@ class CompetenciaService
 
             if ($exportados > 0) {
                 throw new \InvalidArgumentException(
-                    "A competência {$referencia} possui {$exportados} lançamento(s) já exportado(s). " .
-                    "Reabrir pode causar inconsistências com a folha de pagamento. " .
-                    "Estorne os lançamentos exportados antes de reabrir."
+                    "A competência {$referencia} possui {$exportados} lançamento(s) já exportado(s). ".
+                    'Reabrir pode causar inconsistências com a folha de pagamento. '.
+                    'Estorne os lançamentos exportados antes de reabrir.'
                 );
             }
 
             $existente->status = CompetenciaStatus::ABERTA;
+            if (! $existente->data_inicio || ! $existente->data_fim) {
+                [$inicio, $fim] = Competencia::periodoPadrao($referencia);
+                $existente->data_inicio = $inicio;
+                $existente->data_fim = $fim;
+            }
             $existente->data_limite = $dataLimite;
             $existente->aberta_por = Auth::id();
             $existente->fechada_por = null;
             $existente->fechada_em = null;
             $existente->save();
+
             return $existente;
         }
 
@@ -74,25 +82,49 @@ class CompetenciaService
 
         if ($pendentes > 0) {
             throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. " .
+                "Não é possível fechar a competência {$competencia->referencia}. ".
                 "Existem {$pendentes} lançamento(s) pendente(s) de conferência."
             );
         }
 
-        $estornados = LancamentoSetorial::where('competencia', $competencia->referencia)
-            ->where('status', LancamentoStatus::ESTORNADO->value)
+        $pendentesEstorno = LancamentoSetorial::where('competencia', $competencia->referencia)
+            ->whereIn('status', [
+                LancamentoStatus::ESTORNADO->value,
+                LancamentoStatus::ESTORNO_SOLICITADO->value,
+            ])
             ->count();
 
-        if ($estornados > 0) {
+        if ($pendentesEstorno > 0) {
             throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. " .
-                "Existem {$estornados} lançamento(s) estornado(s) aguardando reprocessamento. " .
-                "Resolva os estornos antes de fechar."
+                "Não é possível fechar a competência {$competencia->referencia}. ".
+                "Existem {$pendentesEstorno} lançamento(s) com estorno pendente (estornado ou com solicitação em aberto). ".
+                'Resolva os estornos antes de fechar.'
+            );
+        }
+
+        $cobertura = app(CoberturaFrequenciaService::class)->resumo($competencia);
+        if (! $cobertura['pronta_para_fechar']) {
+            $detalhes = array_filter([
+                $cobertura['nao_iniciadas'] > 0 ? "{$cobertura['nao_iniciadas']} não iniciada(s)" : null,
+                $cobertura['em_preenchimento'] > 0 ? "{$cobertura['em_preenchimento']} em preenchimento" : null,
+                $cobertura['aguardando'] > 0 ? "{$cobertura['aguardando']} aguardando conferência" : null,
+                $cobertura['devolvidas'] > 0 ? "{$cobertura['devolvidas']} devolvida(s)" : null,
+            ]);
+
+            $motivo = 'Pendências: '.implode(', ', $detalhes).'.';
+
+            throw new \InvalidArgumentException(
+                "Não é possível fechar a competência {$competencia->referencia}. {$motivo} ".
+                'Todas as frequências mensais obrigatórias devem estar aprovadas.'
             );
         }
 
         $competencia->status = CompetenciaStatus::FECHADA;
-        $competencia->fechada_por = Auth::id() ?? (\App\Models\User::firstWhere('email', 'admin@example.com')?->id ?? \App\Models\User::first()?->id);
+        $emailSistema = Configuracao::get('email_usuario_sistema', 'admin@example.com');
+        $competencia->fechada_por = Auth::id()
+            ?? (User::firstWhere('email', $emailSistema)?->id
+                ?? User::where('role', UserRole::ADMIN)->first()?->id
+                ?? User::first()?->id);
         $competencia->fechada_em = now();
         $competencia->save();
 
@@ -104,11 +136,18 @@ class CompetenciaService
      */
     public function estatisticas(string $referencia): array
     {
+        $cases = [];
+        foreach (LancamentoStatus::cases() as $status) {
+            $cases[] = "COUNT(CASE WHEN status = '{$status->value}' THEN 1 END) as `{$status->value}`";
+        }
+
+        $row = LancamentoSetorial::where('competencia', $referencia)
+            ->selectRaw(implode(', ', $cases))
+            ->first();
+
         $contadores = [];
         foreach (LancamentoStatus::cases() as $status) {
-            $contadores[$status->value] = LancamentoSetorial::where('competencia', $referencia)
-                ->where('status', $status->value)
-                ->count();
+            $contadores[$status->value] = $row->{$status->value} ?? 0;
         }
 
         return $contadores;
@@ -119,12 +158,12 @@ class CompetenciaService
      */
     public function verificarSla(): array
     {
-        $slaDias = Configuracao::getInt('sla_dias_conferencia', 5);
-        
+        $slaDias = Configuracao::getInt('sla_dias_conferencia', SystemDefaults::SLA_DIAS_CONFERENCIA);
+
         $atrasados = LancamentoSetorial::whereIn('status', [
-                LancamentoStatus::PENDENTE->value,
-                LancamentoStatus::CONFERIDO_SETORIAL->value,
-            ])
+            LancamentoStatus::PENDENTE->value,
+            LancamentoStatus::CONFERIDO_SETORIAL->value,
+        ])
             ->where('created_at', '<=', now()->subDays($slaDias))
             ->with(['servidor', 'evento', 'setorOrigem'])
             ->get();

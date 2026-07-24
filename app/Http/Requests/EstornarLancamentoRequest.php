@@ -8,13 +8,13 @@ class EstornarLancamentoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        return $this->user()?->role?->temAcessoPainel() ?? false;
     }
 
     public function rules(): array
     {
         return [
-            'motivo_estorno' => ['nullable', 'string', 'min:10', 'max:1000'],
+            'motivo_estorno' => ['required', 'string', 'min:10', 'max:1000'],
         ];
     }
 
@@ -22,6 +22,7 @@ class EstornarLancamentoRequest extends FormRequest
     {
         return [
             'motivo_estorno.required' => 'O motivo do estorno é obrigatório.',
+            'motivo_estorno.string' => 'O motivo deve ser um texto válido.',
             'motivo_estorno.min' => 'O motivo deve ter pelo menos 10 caracteres.',
             'motivo_estorno.max' => 'O motivo não pode ter mais de 1000 caracteres.',
         ];

@@ -2,14 +2,12 @@
 
 namespace App\Services;
 
-use App\Models\Servidor;
-use App\Models\LotacaoHistorico;
-use App\Models\LancamentoSetorial;
-use App\Models\User;
-use App\Models\Configuracao;
 use App\Enums\LancamentoStatus;
-use App\Services\AuditService;
-use App\Services\NotificacaoService;
+use App\Models\Configuracao;
+use App\Models\LancamentoSetorial;
+use App\Models\LotacaoHistorico;
+use App\Models\Servidor;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -17,17 +15,13 @@ class ServidorCicloVidaService
 {
     /**
      * Processa transferência de servidor entre setores.
-     * 
+     *
      * Regras:
      * - Cria histórico de lotação do setor antigo
      * - Atualiza setor atual do servidor
      * - Notifica setor origem sobre lançamentos pendentes
      * - Opcionalmente transfere lançamentos pendentes para novo setor (configurável)
-     * 
-     * @param Servidor $servidor
-     * @param int $novoSetorId
-     * @param Carbon $dataTransferencia
-     * @param string|null $motivo
+     *
      * @return array ['lancamentos_afetados' => int, 'acao' => string]
      */
     public function transferirServidor(
@@ -56,7 +50,7 @@ class ServidorCicloVidaService
 
             // 2. Criar histórico de lotação do setor antigo
             $dataFimLotacaoAntiga = $dataTransferencia->copy()->subDay();
-            
+
             // Verificar se já existe lotação ativa para este setor
             $lotacaoAtiva = LotacaoHistorico::where('servidor_id', $servidor->id)
                 ->where('setor_id', $setorAntigoId)
@@ -66,13 +60,13 @@ class ServidorCicloVidaService
             if ($lotacaoAtiva) {
                 // Fechar lotação existente
                 $lotacaoAtiva->data_fim = $dataFimLotacaoAntiga;
-                $lotacaoAtiva->observacao = ($lotacaoAtiva->observacao ?? '') . 
+                $lotacaoAtiva->observacao = ($lotacaoAtiva->observacao ?? '').
                     " | Transferência para setor {$novoSetorId} em {$dataTransferencia->format('d/m/Y')}. Motivo: {$motivo}";
                 $lotacaoAtiva->save();
             } else {
                 // Criar nova entrada de histórico
                 $dataInicioLotacao = $servidor->data_admissao ?? now()->subYear();
-                
+
                 LotacaoHistorico::create([
                     'servidor_id' => $servidor->id,
                     'setor_id' => $setorAntigoId,
@@ -93,7 +87,7 @@ class ServidorCicloVidaService
 
             // 4. Atualizar setor do servidor
             $servidor->setor_id = $novoSetorId;
-            $servidor->save();
+            Servidor::withoutEvents(fn () => $servidor->save());
 
             // 5. Opção: Transferir lançamentos pendentes para novo setor (configurável)
             $transferirLancamentos = Configuracao::get('transferir_lancamentos_ao_mudar_setor', 'false') === 'true';
@@ -110,14 +104,14 @@ class ServidorCicloVidaService
             // 6. Notificar setor origem sobre pendências
             if ($lancamentosPendentes->isNotEmpty()) {
                 $usuariosSetorOrigem = User::where('setor_id', $setorAntigoId)->get();
-                
+
                 foreach ($usuariosSetorOrigem as $usuario) {
                     NotificacaoService::criar(
                         $usuario->id,
                         'TRANSFERENCIA_SERVIDOR',
                         'Servidor Transferido',
-                        "O servidor {$servidor->nome} foi transferido para outro setor. " .
-                        ($transferirLancamentos 
+                        "O servidor {$servidor->nome} foi transferido para outro setor. ".
+                        ($transferirLancamentos
                             ? "{$lancamentosTransferidos} lançamento(s) pendente(s) foram transferidos."
                             : "Verifique os {$lancamentosPendentes->count()} lançamento(s) pendente(s) deste servidor."),
                         route('lancamentos.index', ['servidor_id' => $servidor->id])
@@ -130,9 +124,9 @@ class ServidorCicloVidaService
                 'TRANSFERIU_SERVIDOR',
                 'Servidor',
                 $servidor->id,
-                "Servidor transferido do setor {$setorAntigoId} para {$novoSetorId}. " .
-                "Data: {$dataTransferencia->format('d/m/Y')}. " .
-                "Lançamentos afetados: {$lancamentosPendentes->count()}. " .
+                "Servidor transferido do setor {$setorAntigoId} para {$novoSetorId}. ".
+                "Data: {$dataTransferencia->format('d/m/Y')}. ".
+                "Lançamentos afetados: {$lancamentosPendentes->count()}. ".
                 "Motivo: {$motivo}"
             );
 
@@ -154,16 +148,14 @@ class ServidorCicloVidaService
 
     /**
      * Processa desligamento/exoneração/aposentadoria de servidor.
-     * 
+     *
      * Regras:
      * - Cancela automaticamente lançamentos pendentes de competências futuras ao desligamento
      * - Mantém lançamentos de competências já passadas (para histórico)
      * - Marca servidor como inativo
      * - Notifica setores afetados
-     * 
-     * @param Servidor $servidor
-     * @param Carbon $dataDesligamento
-     * @param string $motivo EXONERACAO, APOSENTADORIA, etc.
+     *
+     * @param  string  $motivo  EXONERACAO, APOSENTADORIA, etc.
      * @return array ['lancamentos_cancelados' => int, 'setores_notificados' => int]
      */
     public function desligarServidor(
@@ -186,22 +178,32 @@ class ServidorCicloVidaService
                 ->where('competencia', '>=', $competenciaDesligamento)
                 ->get();
 
-            $cancelados = 0;
+            $cancelados = $lancamentosCancelar->count();
             $motivoCancelamento = "Servidor desligado em {$dataDesligamento->format('d/m/Y')}. Motivo: {$motivo}";
 
-            foreach ($lancamentosCancelar as $lancamento) {
-                $lancamento->status = LancamentoStatus::REJEITADO;
-                $lancamento->motivo_rejeicao = $motivoCancelamento;
-                $lancamento->id_validador = auth()->id();
-                $lancamento->validated_at = now();
-                $lancamento->save();
-                $cancelados++;
+            // Cancelamento em lote (evita N+1)
+            if ($cancelados > 0) {
+                LancamentoSetorial::whereIn('id', $lancamentosCancelar->pluck('id'))
+                    ->update([
+                        'status' => LancamentoStatus::CANCELADO->value,
+                        'motivo_rejeicao' => $motivoCancelamento,
+                        'id_validador' => auth()->id(),
+                        'validated_at' => now(),
+                        'updated_at' => now(),
+                    ]);
             }
 
             // Atualizar servidor
             $servidor->ativo = false;
             $servidor->data_desligamento = $dataDesligamento;
-            $servidor->save();
+            Servidor::withoutEvents(fn () => $servidor->save());
+
+            $servidor->vinculosFuncionais()
+                ->whereNull('data_fim')
+                ->update(['data_fim' => $dataDesligamento, 'updated_at' => now()]);
+            $servidor->lotacoes()
+                ->whereNull('data_fim')
+                ->update(['data_fim' => $dataDesligamento, 'updated_at' => now()]);
 
             // Notificar setores afetados
             $setoresAfetados = $lancamentosCancelar->pluck('setor_origem_id')->unique();
@@ -209,14 +211,14 @@ class ServidorCicloVidaService
 
             foreach ($setoresAfetados as $setorId) {
                 $usuarios = User::where('setor_id', $setorId)->get();
-                
+
                 foreach ($usuarios as $usuario) {
                     NotificacaoService::criar(
                         $usuario->id,
                         'SERVIDOR_DESLIGADO',
                         'Servidor Desligado',
-                        "O servidor {$servidor->nome} foi desligado em {$dataDesligamento->format('d/m/Y')}. " .
-                        "Motivo: {$motivo}. " .
+                        "O servidor {$servidor->nome} foi desligado em {$dataDesligamento->format('d/m/Y')}. ".
+                        "Motivo: {$motivo}. ".
                         "{$cancelados} lançamento(s) pendente(s) foram cancelados automaticamente.",
                         route('lancamentos.index', ['servidor_id' => $servidor->id])
                     );
@@ -229,9 +231,9 @@ class ServidorCicloVidaService
                 'DESLIGOU_SERVIDOR',
                 'Servidor',
                 $servidor->id,
-                "Servidor desligado. Motivo: {$motivo}. " .
-                "Data: {$dataDesligamento->format('d/m/Y')}. " .
-                "{$cancelados} lançamento(s) cancelado(s). " .
+                "Servidor desligado. Motivo: {$motivo}. ".
+                "Data: {$dataDesligamento->format('d/m/Y')}. ".
+                "{$cancelados} lançamento(s) cancelado(s). ".
                 "{$notificados} usuário(s) notificado(s)."
             );
 
@@ -247,5 +249,43 @@ class ServidorCicloVidaService
             DB::rollBack();
             throw $e;
         }
+    }
+
+    public function reativarServidor(Servidor $servidor, Carbon $dataReativacao, ?int $usuarioId): void
+    {
+        DB::transaction(function () use ($servidor, $dataReativacao, $usuarioId): void {
+            if ($servidor->ativo) {
+                throw new \InvalidArgumentException('O servidor já está ativo.');
+            }
+            if (! $servidor->cargo || ! $servidor->vinculo || ! $servidor->carga_horaria) {
+                throw new \InvalidArgumentException('Complete os dados funcionais antes de reativar o servidor.');
+            }
+            if ($servidor->data_desligamento && $dataReativacao->lte($servidor->data_desligamento)) {
+                throw new \InvalidArgumentException('A reativação deve ocorrer depois do desligamento.');
+            }
+
+            Servidor::withoutEvents(fn () => $servidor->update(['ativo' => true, 'data_desligamento' => null]));
+            $servidor->vinculosFuncionais()->create([
+                'matricula' => $servidor->matricula,
+                'tipo_vinculo' => $servidor->vinculo,
+                'cargo' => $servidor->cargo,
+                'carga_horaria' => $servidor->carga_horaria,
+                'data_inicio' => $dataReativacao,
+                'observacao' => 'Nova vigência criada pela reativação do servidor.',
+                'registrado_por_id' => $usuarioId,
+            ]);
+            $servidor->lotacoes()->create([
+                'setor_id' => $servidor->setor_id,
+                'data_inicio' => $dataReativacao,
+                'observacao' => 'Nova lotação criada pela reativação do servidor.',
+            ]);
+
+            AuditService::registrar(
+                'REATIVOU_SERVIDOR',
+                'Servidor',
+                $servidor->id,
+                "Servidor reativado com nova vigência em {$dataReativacao->format('d/m/Y')}."
+            );
+        });
     }
 }

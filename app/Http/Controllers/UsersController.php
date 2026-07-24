@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
 use App\Models\Setor;
+use App\Models\User;
 use App\Services\UserService;
-use App\Services\AuditService;
-use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class UsersController extends Controller
 {
@@ -17,12 +18,14 @@ class UsersController extends Controller
     public function __construct(UserService $userService)
     {
         $this->middleware('auth');
-        $this->middleware('role:CENTRAL');
+        $this->middleware('role:CENTRAL|ADMIN');
         $this->userService = $userService;
     }
 
     public function index(): View
     {
+        $this->authorize('viewAny', User::class);
+
         $users = User::with('setor')
             ->orderBy('name')
             ->paginate(20);
@@ -34,6 +37,8 @@ class UsersController extends Controller
 
     public function create(): View
     {
+        $this->authorize('create', User::class);
+
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
 
         return view('admin.users.create', [
@@ -41,7 +46,7 @@ class UsersController extends Controller
         ]);
     }
 
-    public function store(\App\Http\Requests\StoreUserRequest $request): RedirectResponse
+    public function store(StoreUserRequest $request): RedirectResponse
     {
         $this->userService->create($request->validated());
 
@@ -59,6 +64,8 @@ class UsersController extends Controller
 
     public function edit(User $user): View
     {
+        $this->authorize('update', $user);
+
         $setores = Setor::where('ativo', true)->orderBy('nome')->get();
 
         return view('admin.users.edit', [
@@ -67,7 +74,7 @@ class UsersController extends Controller
         ]);
     }
 
-    public function update(\App\Http\Requests\UpdateUserRequest $request, User $user): RedirectResponse
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
         $this->userService->update($user, $request->validated());
 
@@ -78,16 +85,26 @@ class UsersController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
-        $dadosUsuario = $user->toArray();
-        $user->delete();
+        $this->authorize('delete', $user);
 
-        AuditService::excluiu('User', $user->id,
-            "Usuário deletado: {$user->name} ({$user->email})",
-            $dadosUsuario
-        );
+        try {
+            $this->userService->desativar($user, auth()->user());
+        } catch (\InvalidArgumentException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return redirect()
             ->route('admin.users.index')
-            ->with('success', 'Usuário deletado com sucesso!');
+            ->with('success', 'Usuário desativado. O histórico foi preservado.');
+    }
+
+    public function ativar(User $user): RedirectResponse
+    {
+        $this->authorize('update', $user);
+        $this->userService->ativar($user);
+
+        return redirect()
+            ->route('admin.users.index')
+            ->with('success', 'Usuário reativado com sucesso.');
     }
 }

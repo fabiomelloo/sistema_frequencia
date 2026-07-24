@@ -2,13 +2,16 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\UserRole;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Password;
 
 class StoreUserRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        return $this->user()?->can('create', User::class) ?? false;
     }
 
     public function rules(): array
@@ -16,9 +19,9 @@ class StoreUserRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'confirmed', Password::defaults()],
             'setor_id' => ['required', 'exists:setores,id'],
-            'role' => ['required', 'in:' . implode(',', \App\Enums\UserRole::valores())],
+            'role' => ['required', 'in:'.implode(',', UserRole::valores())],
         ];
     }
 
@@ -31,7 +34,7 @@ class StoreUserRequest extends FormRequest
             'email.email' => 'Digite um email válido.',
             'email.unique' => 'Este email já está cadastrado.',
             'password.required' => 'A senha é obrigatória.',
-            'password.min' => 'A senha deve ter no mínimo 8 caracteres.',
+            'password.min' => 'A senha deve ter no mínimo 12 caracteres.',
             'password.confirmed' => 'As senhas não conferem.',
             'setor_id.required' => 'O setor é obrigatório.',
             'setor_id.exists' => 'Setor inválido.',

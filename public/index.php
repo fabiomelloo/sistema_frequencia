@@ -1,17 +1,20 @@
 <?php
 
+use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
+
 define('LARAVEL_START', microtime(true));
 
-require __DIR__.'/../sistema_frequencia/vendor/autoload.php';
+// Determine if the application is in maintenance mode...
+if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
+    require $maintenance;
+}
 
-$app = require_once __DIR__.'/../sistema_frequencia/bootstrap/app.php';
+// Register the Composer autoloader...
+require __DIR__.'/../vendor/autoload.php';
 
-$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
+// Bootstrap Laravel and handle the incoming request...
+/** @var Application $app */
+$app = require_once __DIR__.'/../bootstrap/app.php';
 
-$response = $kernel->handle(
-    $request = Illuminate\Http\Request::capture()
-);
-
-$response->send();
-
-$kernel->terminate($request, $response);
+$app->handleRequest(Request::capture());

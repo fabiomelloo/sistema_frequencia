@@ -15,7 +15,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->foreignId('setor_id')->constrained('setores');
-            $table->enum('role', ['SETORIAL', 'CENTRAL'])->default('SETORIAL');
+            $table->enum('role', ['SETORIAL', 'CENTRAL', 'ADMIN', 'GESTOR', 'AUDITOR'])->default('SETORIAL');
             $table->rememberToken();
             $table->timestamps();
         });

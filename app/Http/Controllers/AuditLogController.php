@@ -25,7 +25,7 @@ class AuditLogController extends Controller
             $query->where('created_at', '>=', $request->data_inicio);
         }
         if ($request->filled('data_fim')) {
-            $query->where('created_at', '<=', $request->data_fim . ' 23:59:59');
+            $query->where('created_at', '<=', $request->data_fim.' 23:59:59');
         }
 
         $logs = $query->paginate(20)->withQueryString();

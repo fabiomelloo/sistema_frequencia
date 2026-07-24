@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\LancamentoStatus;
+use App\Models\EventoFolha;
 use App\Models\LancamentoSetorial;
 use App\Models\Servidor;
 use App\Models\Setor;
-use App\Models\EventoFolha;
-use App\Enums\LancamentoStatus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -28,16 +29,18 @@ class DashboardController extends Controller
         $setorId = $user->setor_id;
         $competenciaAtual = now()->format('Y-m');
 
-        // Otimização: Agregação em uma única query
-        $stats = LancamentoSetorial::where('setor_origem_id', $setorId)
-            ->selectRaw("
-                COUNT(CASE WHEN status = 'PENDENTE' THEN 1 END) as pendentes,
-                COUNT(CASE WHEN status = 'CONFERIDO_SETORIAL' THEN 1 END) as conferidos_setorial,
-                COUNT(CASE WHEN status = 'CONFERIDO' THEN 1 END) as conferidos,
-                COUNT(CASE WHEN status = 'REJEITADO' THEN 1 END) as rejeitados,
-                COUNT(CASE WHEN status = 'EXPORTADO' THEN 1 END) as exportados
-            ")
-            ->first();
+        $stats = Cache::remember(
+            "dashboard_setorial_stats_{$setorId}",
+            now()->addMinutes(5),
+            fn () => LancamentoSetorial::where('setor_origem_id', $setorId)
+                ->selectRaw("
+                    COUNT(CASE WHEN status = 'PENDENTE' THEN 1 END) as pendentes,
+                    COUNT(CASE WHEN status = 'CONFERIDO_SETORIAL' THEN 1 END) as conferidos_setorial,
+                    COUNT(CASE WHEN status = 'CONFERIDO' THEN 1 END) as conferidos,
+                    COUNT(CASE WHEN status = 'REJEITADO' THEN 1 END) as rejeitados,
+                    COUNT(CASE WHEN status = 'EXPORTADO' THEN 1 END) as exportados
+                ")->first()
+        );
 
         // Agrupa conferidos (Setorial + Central) para visualização simplificada, se desejado,
         // mas mantendo chaves originais para compatibilidade com a view
@@ -48,13 +51,16 @@ class DashboardController extends Controller
             'exportados' => $stats->exportados,
         ];
 
-        $statsMes = LancamentoSetorial::where('setor_origem_id', $setorId)
-            ->where('competencia', $competenciaAtual)
-            ->selectRaw("
-                COUNT(*) as total,
-                COUNT(CASE WHEN status = 'PENDENTE' THEN 1 END) as pendentes
-            ")
-            ->first();
+        $statsMes = Cache::remember(
+            "dashboard_setorial_mes_{$setorId}_{$competenciaAtual}",
+            now()->addMinutes(15),
+            fn () => LancamentoSetorial::where('setor_origem_id', $setorId)
+                ->where('competencia', $competenciaAtual)
+                ->selectRaw("
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN status = 'PENDENTE' THEN 1 END) as pendentes
+                ")->first()
+        );
 
         $contadoresMes = [
             'total' => $statsMes->total,
@@ -88,14 +94,16 @@ class DashboardController extends Controller
     {
         $competenciaAtual = now()->format('Y-m');
 
-        // Otimização: Agregação em uma única query
-        $stats = LancamentoSetorial::selectRaw("
+        $stats = Cache::remember(
+            'dashboard_central_stats',
+            now()->addMinutes(5),
+            fn () => LancamentoSetorial::selectRaw("
                 COUNT(CASE WHEN status = 'PENDENTE' THEN 1 END) as pendentes,
                 COUNT(CASE WHEN status = 'CONFERIDO' THEN 1 END) as conferidos,
                 COUNT(CASE WHEN status = 'REJEITADO' THEN 1 END) as rejeitados,
                 COUNT(CASE WHEN status = 'EXPORTADO' THEN 1 END) as exportados
-            ")
-            ->first();
+            ")->first()
+        );
 
         $contadores = [
             'pendentes' => $stats->pendentes,
@@ -105,15 +113,19 @@ class DashboardController extends Controller
         ];
 
         // Pendentes por setor e outros dados mantidos...
-        $pendentesPorSetor = LancamentoSetorial::where('status', LancamentoStatus::PENDENTE)
-            ->selectRaw('setor_origem_id, COUNT(*) as total')
-            ->groupBy('setor_origem_id')
-            ->with('setorOrigem')
-            ->get()
-            ->map(fn ($item) => [
-                'setor' => $item->setorOrigem->sigla ?? $item->setorOrigem->nome,
-                'total' => $item->total,
-            ]);
+        $pendentesPorSetor = Cache::remember(
+            'dashboard_central_pendentes_setor',
+            now()->addMinutes(5),
+            fn () => LancamentoSetorial::where('status', LancamentoStatus::PENDENTE)
+                ->selectRaw('setor_origem_id, COUNT(*) as total')
+                ->groupBy('setor_origem_id')
+                ->with('setorOrigem')
+                ->get()
+                ->map(fn ($item) => [
+                    'setor' => $item->setorOrigem->sigla ?? $item->setorOrigem->nome,
+                    'total' => $item->total,
+                ])
+        );
 
         $lancamentosPorCompetencia = LancamentoSetorial::selectRaw('competencia, status, COUNT(*) as total')
             ->whereNotNull('competencia')

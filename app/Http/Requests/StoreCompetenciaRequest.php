@@ -2,13 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Competencia;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreCompetenciaRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->isCentral();
+        return $this->user()?->can('create', Competencia::class) ?? false;
     }
 
     public function rules(): array

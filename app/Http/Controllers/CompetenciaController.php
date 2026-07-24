@@ -2,20 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Competencia;
-use App\Services\CompetenciaService;
-use App\Services\AuditService;
 use App\Http\Requests\StoreCompetenciaRequest;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
+use App\Models\Competencia;
+use App\Services\AuditService;
+use App\Services\CoberturaFrequenciaService;
+use App\Services\CompetenciaService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class CompetenciaController extends Controller
 {
     public function index(): View
     {
+        $this->authorize('viewAny', Competencia::class);
+
         $competencias = Competencia::orderBy('referencia', 'desc')->paginate(12);
-        
+
         return view('admin.competencias.index', [
             'competencias' => $competencias,
         ]);
@@ -29,7 +31,7 @@ class CompetenciaController extends Controller
             $competencia = $service->abrir($validated['referencia'], $validated['data_limite'] ?? null);
 
             AuditService::criou('Competencia', $competencia->id,
-                "Competência {$competencia->referencia} aberta" .
+                "Competência {$competencia->referencia} aberta".
                 ($competencia->data_limite ? " com prazo até {$competencia->data_limite->format('d/m/Y')}" : '')
             );
 
@@ -42,8 +44,22 @@ class CompetenciaController extends Controller
         }
     }
 
+    public function cobertura(Competencia $competencia, CoberturaFrequenciaService $service): View
+    {
+        $this->authorize('view', $competencia);
+        $cobertura = $service->porCompetencia($competencia);
+
+        return view('admin.competencias.cobertura', [
+            'competencia' => $competencia,
+            'cobertura' => $cobertura,
+            'resumo' => $service->resumo($competencia, $cobertura),
+        ]);
+    }
+
     public function fechar(Competencia $competencia, CompetenciaService $service): RedirectResponse
     {
+        $this->authorize('update', $competencia);
+
         try {
             $service->fechar($competencia);
 
@@ -62,6 +78,8 @@ class CompetenciaController extends Controller
 
     public function reabrir(Competencia $competencia, CompetenciaService $service): RedirectResponse
     {
+        $this->authorize('update', $competencia);
+
         try {
             $service->abrir($competencia->referencia, $competencia->data_limite);
 

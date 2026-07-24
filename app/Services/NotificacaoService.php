@@ -2,12 +2,48 @@
 
 namespace App\Services;
 
-use App\Models\Notificacao;
-use App\Models\User;
+use App\Enums\CompetenciaStatus;
+use App\Enums\LancamentoStatus;
+use App\Models\Competencia;
+use App\Models\FolhaFrequencia;
 use App\Models\LancamentoSetorial;
+use App\Models\Notificacao;
+use App\Models\PrazoSetorial;
+use App\Models\User;
 
 class NotificacaoService
 {
+    public static function folhaFrequenciaAprovada(FolhaFrequencia $folha): void
+    {
+        self::notificarSetorDaFolha(
+            $folha,
+            'FREQUENCIA_APROVADA',
+            'Frequência mensal aprovada',
+            "A frequência de {$folha->competencia->descricao} foi aprovada pela Central.",
+        );
+    }
+
+    public static function folhaFrequenciaDevolvida(FolhaFrequencia $folha): void
+    {
+        self::notificarSetorDaFolha(
+            $folha,
+            'FREQUENCIA_DEVOLVIDA',
+            'Frequência devolvida para correção',
+            "A frequência de {$folha->competencia->descricao} foi devolvida. Orientação: {$folha->motivo_devolucao}",
+        );
+    }
+
+    private static function notificarSetorDaFolha(
+        FolhaFrequencia $folha,
+        string $tipo,
+        string $titulo,
+        string $mensagem,
+    ): void {
+        foreach (User::where('setor_id', $folha->setor_id)->get() as $usuario) {
+            self::criar($usuario->id, $tipo, $titulo, $mensagem, route('frequencia.show', $folha));
+        }
+    }
+
     /**
      * Cria uma notificação para um usuário.
      */
@@ -33,13 +69,13 @@ class NotificacaoService
     public static function lancamentoAprovado(LancamentoSetorial $lancamento): void
     {
         $usuariosSetor = User::where('setor_id', $lancamento->setor_origem_id)->get();
-        
+
         foreach ($usuariosSetor as $usuario) {
             self::criar(
                 $usuario->id,
                 'APROVADO',
                 'Lançamento Aprovado',
-                "O lançamento do servidor {$lancamento->servidor->nome} " .
+                "O lançamento do servidor {$lancamento->servidor->nome} ".
                 "({$lancamento->evento->descricao}) foi aprovado.",
                 route('lancamentos.show', $lancamento)
             );
@@ -52,13 +88,13 @@ class NotificacaoService
     public static function lancamentoRejeitado(LancamentoSetorial $lancamento): void
     {
         $usuariosSetor = User::where('setor_id', $lancamento->setor_origem_id)->get();
-        
+
         foreach ($usuariosSetor as $usuario) {
             self::criar(
                 $usuario->id,
                 'REJEITADO',
                 'Lançamento Rejeitado',
-                "O lançamento do servidor {$lancamento->servidor->nome} " .
+                "O lançamento do servidor {$lancamento->servidor->nome} ".
                 "({$lancamento->evento->descricao}) foi rejeitado. Motivo: {$lancamento->motivo_rejeicao}",
                 route('lancamentos.show', $lancamento)
             );
@@ -70,24 +106,22 @@ class NotificacaoService
      */
     public static function lancamentosExportados(array $lancamentoIds): void
     {
-        $lancamentos = LancamentoSetorial::whereIn('id', $lancamentoIds)->get();
-        $setoresNotificados = [];
+        // Eager-load para evitar N+1 ao acessar servidor/evento
+        $setorIds = LancamentoSetorial::whereIn('id', $lancamentoIds)
+            ->distinct()
+            ->pluck('setor_origem_id');
 
-        foreach ($lancamentos as $lancamento) {
-            $setorId = $lancamento->setor_origem_id;
-            if (!in_array($setorId, $setoresNotificados)) {
-                $setoresNotificados[] = $setorId;
-                $usuarios = User::where('setor_id', $setorId)->get();
-                
-                foreach ($usuarios as $usuario) {
-                    self::criar(
-                        $usuario->id,
-                        'EXPORTADO',
-                        'Lançamentos Exportados',
-                        'Lançamentos do seu setor foram exportados para a folha de pagamento.',
-                        route('lancamentos.index')
-                    );
-                }
+        foreach ($setorIds as $setorId) {
+            $usuarios = User::where('setor_id', $setorId)->get();
+
+            foreach ($usuarios as $usuario) {
+                self::criar(
+                    $usuario->id,
+                    'EXPORTADO',
+                    'Lançamentos Exportados',
+                    'Lançamentos do seu setor foram exportados para a folha de pagamento.',
+                    route('lancamentos.index')
+                );
             }
         }
     }
@@ -98,13 +132,13 @@ class NotificacaoService
     public static function lancamentoEstornado(LancamentoSetorial $lancamento, string $motivo): void
     {
         $usuariosSetor = User::where('setor_id', $lancamento->setor_origem_id)->get();
-        
+
         foreach ($usuariosSetor as $usuario) {
             self::criar(
                 $usuario->id,
                 'ESTORNADO',
                 'Lançamento Estornado',
-                "O lançamento do servidor {$lancamento->servidor->nome} " .
+                "O lançamento do servidor {$lancamento->servidor->nome} ".
                 "({$lancamento->evento->descricao}) foi estornado. Motivo: {$motivo}",
                 route('lancamentos.show', $lancamento)
             );
@@ -127,32 +161,39 @@ class NotificacaoService
      */
     public static function notificarPrazosProximos(int $diasAntecedencia = 3): int
     {
-        $competenciaAberta = \App\Models\Competencia::where('status', \App\Enums\CompetenciaStatus::ABERTA->value)->first();
-        if (!$competenciaAberta) {
+        $competenciaAberta = Competencia::where('status', CompetenciaStatus::ABERTA->value)->first();
+        if (! $competenciaAberta) {
             return 0;
         }
 
-        $dataLimite = $competenciaAberta->data_limite;
-        if (!$dataLimite) {
-            return 0;
-        }
-
-        $diasRestantes = now()->diffInDays($dataLimite, false);
-        if ($diasRestantes > $diasAntecedencia || $diasRestantes < 0) {
-            return 0;
-        }
+        $dataLimiteGlobal = $competenciaAberta->data_limite;
 
         // Buscar setores que ainda têm pendentes
-        $setoresComPendentes = \App\Models\LancamentoSetorial::where('competencia', $competenciaAberta->referencia)
+        $setoresComPendentes = LancamentoSetorial::where('competencia', $competenciaAberta->referencia)
             ->whereIn('status', [
-                \App\Enums\LancamentoStatus::PENDENTE->value,
-                \App\Enums\LancamentoStatus::REJEITADO->value,
+                LancamentoStatus::PENDENTE->value,
+                LancamentoStatus::REJEITADO->value,
             ])
             ->distinct('setor_origem_id')
             ->pluck('setor_origem_id');
 
         $notificados = 0;
         foreach ($setoresComPendentes as $setorId) {
+            // Verifica prazo setorial específico, se existir
+            $prazoSetorial = PrazoSetorial::obterPrazo($competenciaAberta->id, $setorId);
+            $dataLimite = ($prazoSetorial && $prazoSetorial->data_limite)
+                ? $prazoSetorial->data_limite
+                : $dataLimiteGlobal;
+
+            if (! $dataLimite) {
+                continue;
+            }
+
+            $diasRestantes = now()->diffInDays($dataLimite, false);
+            if ($diasRestantes > $diasAntecedencia || $diasRestantes < 0) {
+                continue;
+            }
+
             $usuarios = User::where('setor_id', $setorId)->get();
             foreach ($usuarios as $usuario) {
                 // Evitar notificações duplicadas no mesmo dia
@@ -161,13 +202,14 @@ class NotificacaoService
                     ->whereDate('created_at', today())
                     ->exists();
 
-                if (!$jaNotificado) {
+                if (! $jaNotificado) {
+                    $origemPrazo = $prazoSetorial ? 'setorial' : 'geral';
                     self::criar(
                         $usuario->id,
                         'PRAZO_PROXIMO',
                         'Prazo Próximo do Vencimento',
-                        "A competência {$competenciaAberta->referencia} vence em {$diasRestantes} dia(s) " .
-                        "({$dataLimite->format('d/m/Y')}). Finalize seus lançamentos pendentes.",
+                        "A competência {$competenciaAberta->referencia} vence em {$diasRestantes} dia(s) ".
+                        "({$dataLimite->format('d/m/Y')}). Prazo {$origemPrazo}. Finalize seus lançamentos pendentes.",
                         route('lancamentos.index')
                     );
                     $notificados++;

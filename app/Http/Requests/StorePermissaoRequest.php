@@ -8,7 +8,7 @@ class StorePermissaoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        return ($this->user()?->isCentral() || $this->user()?->isAdmin()) ?? false;
     }
 
     public function rules(): array

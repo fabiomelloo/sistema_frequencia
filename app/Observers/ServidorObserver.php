@@ -2,9 +2,9 @@
 
 namespace App\Observers;
 
-use App\Models\Servidor;
-use App\Models\LancamentoSetorial;
 use App\Enums\LancamentoStatus;
+use App\Models\LancamentoSetorial;
+use App\Models\Servidor;
 
 class ServidorObserver
 {
@@ -14,14 +14,12 @@ class ServidorObserver
      * Detecta mudanças de setor e de status (inativação) e cancela
      * automaticamente lançamentos pendentes afetados.
      *
-     * Nota: Quando a mudança é feita via ServidorCicloVidaService
-     * (que faz bind 'servidor.transferindo'), este observer não age
-     * para evitar duplicação de lógica.
+     * Nota: o ServidorCicloVidaService salva o servidor sem disparar eventos
+     * para evitar duplicação desta regra com o fluxo transacional completo.
      */
     public function updated(Servidor $servidor): void
     {
-        // Se foi acionado pelo ServidorCicloVidaService, não agir novamente
-        if (app()->runningInConsole() || app()->bound('servidor.transferindo')) {
+        if (app()->runningInConsole()) {
             return;
         }
 
@@ -30,13 +28,13 @@ class ServidorObserver
             $setorAntigoId = $servidor->getOriginal('setor_id');
             $this->cancelarLancamentosPendentes(
                 $servidor->id,
-                "Cancelado automaticamente: O servidor foi transferido de setor.",
+                'Cancelado automaticamente: O servidor foi transferido de setor.',
                 $setorAntigoId
             );
         }
 
         // Servidor desligado/inativado
-        if ($servidor->wasChanged('ativo') && !$servidor->ativo) {
+        if ($servidor->wasChanged('ativo') && ! $servidor->ativo) {
             $dataDesligamento = $servidor->data_desligamento ?? now();
             $competenciaDesligamento = $dataDesligamento->format('Y-m');
             $this->cancelarLancamentosPendentes(
@@ -51,10 +49,8 @@ class ServidorObserver
     /**
      * Cancela lançamentos pendentes de um servidor.
      *
-     * @param int $servidorId
-     * @param string $motivo
-     * @param int|null $setorOrigemId  Se informado, filtra apenas pelo setor antigo (transferência)
-     * @param string|null $competenciaMinima  Se informado, filtra competência >= (desligamento)
+     * @param  int|null  $setorOrigemId  Se informado, filtra apenas pelo setor antigo (transferência)
+     * @param  string|null  $competenciaMinima  Se informado, filtra competência >= (desligamento)
      */
     private function cancelarLancamentosPendentes(
         int $servidorId,
@@ -78,9 +74,9 @@ class ServidorObserver
         }
 
         $query->update([
-            'status' => LancamentoStatus::REJEITADO->value,
+            'status' => LancamentoStatus::CANCELADO->value,
             'motivo_rejeicao' => $motivo,
-            'id_validador' => auth()->id() ?? 1,
+            'id_validador' => auth()->id(), // null em contexto de console — ação automática do sistema
             'validated_at' => now(),
         ]);
     }

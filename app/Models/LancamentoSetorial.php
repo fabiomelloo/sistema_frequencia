@@ -2,19 +2,24 @@
 
 namespace App\Models;
 
+use App\Enums\LancamentoStatus;
+use App\Support\SystemDefaults;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LancamentoSetorial extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $table = 'lancamentos_setoriais';
+
     protected $fillable = [
         'servidor_id',
         'evento_id',
         'setor_origem_id',
+        'criado_por_id',
         'competencia',
         'dias_trabalhados',
         'dias_noturnos',
@@ -31,7 +36,7 @@ class LancamentoSetorial extends Model
     ];
 
     protected $casts = [
-        'status' => \App\Enums\LancamentoStatus::class,
+        'status' => LancamentoStatus::class,
         'validated_at' => 'datetime',
         'exportado_em' => 'datetime',
         'conferido_setorial_em' => 'datetime',
@@ -63,6 +68,11 @@ class LancamentoSetorial extends Model
         return $this->belongsTo(Setor::class, 'setor_origem_id');
     }
 
+    public function criador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'criado_por_id');
+    }
+
     public function validador(): BelongsTo
     {
         return $this->belongsTo(User::class, 'id_validador');
@@ -75,69 +85,77 @@ class LancamentoSetorial extends Model
 
     public function isPendente(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::PENDENTE;
+        return $this->status === LancamentoStatus::PENDENTE;
     }
 
     public function isConferidoSetorial(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL;
+        return $this->status === LancamentoStatus::CONFERIDO_SETORIAL;
     }
 
     public function isConferido(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::CONFERIDO;
+        return $this->status === LancamentoStatus::CONFERIDO;
     }
 
     public function isRejeitado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::REJEITADO;
+        return $this->status === LancamentoStatus::REJEITADO;
     }
 
     public function isExportado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::EXPORTADO;
+        return $this->status === LancamentoStatus::EXPORTADO;
     }
 
     public function isEstornado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::ESTORNADO;
+        return $this->status === LancamentoStatus::ESTORNADO;
     }
 
     public function isCancelado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::CANCELADO;
+        return $this->status === LancamentoStatus::CANCELADO;
     }
 
     public function isEstornoSolicitado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::ESTORNO_SOLICITADO;
+        return $this->status === LancamentoStatus::ESTORNO_SOLICITADO;
     }
 
     public function podeSerEditado(): bool
     {
         return in_array($this->status, [
-            \App\Enums\LancamentoStatus::PENDENTE,
-            \App\Enums\LancamentoStatus::REJEITADO,
-            \App\Enums\LancamentoStatus::ESTORNADO,
+            LancamentoStatus::PENDENTE,
+            LancamentoStatus::REJEITADO,
         ]);
     }
 
+    /**
+     * Um lançamento REJEITADO (que não atingiu limite de rejeições)
+     * pode ser corrigido e reenviado ao workflow.
+     */
     public function podeSerReenviado(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::REJEITADO;
+        return $this->status === LancamentoStatus::REJEITADO;
     }
 
+    /**
+     * PENDENTE e REJEITADO podem ser cancelados pelo setor.
+     * ESTORNADO não: neste ponto o dado financeiro já foi processado,
+     * e o status ESTORNADO serve como registro histórico.
+     */
     public function podeSerCancelado(): bool
     {
         return in_array($this->status, [
-            \App\Enums\LancamentoStatus::PENDENTE,
-            \App\Enums\LancamentoStatus::REJEITADO,
+            LancamentoStatus::PENDENTE,
+            LancamentoStatus::REJEITADO,
         ]);
     }
 
     public function podeSolicitarEstorno(): bool
     {
-        return $this->status === \App\Enums\LancamentoStatus::EXPORTADO;
+        return $this->status === LancamentoStatus::EXPORTADO;
     }
 
     /**
@@ -145,9 +163,10 @@ class LancamentoSetorial extends Model
      */
     public function diasPendente(): int
     {
-        if (!$this->isPendente() && !$this->isConferidoSetorial()) {
+        if (! $this->isPendente() && ! $this->isConferidoSetorial()) {
             return 0;
         }
+
         return (int) $this->created_at->diffInDays(now());
     }
 
@@ -156,9 +175,10 @@ class LancamentoSetorial extends Model
      */
     public function slaEmAlerta(): bool
     {
-        $slaDias = \App\Models\Configuracao::getInt('sla_dias_conferencia', 5);
-        $alertaDias = \App\Models\Configuracao::getInt('sla_dias_alerta', 3);
+        $slaDias = Configuracao::getInt('sla_dias_conferencia', SystemDefaults::SLA_DIAS_CONFERENCIA);
+        $alertaDias = Configuracao::getInt('sla_dias_alerta', SystemDefaults::SLA_DIAS_ALERTA);
         $pendente = $this->diasPendente();
+
         return $pendente >= $alertaDias && $pendente < $slaDias;
     }
 
@@ -167,7 +187,8 @@ class LancamentoSetorial extends Model
      */
     public function slaUltrapassado(): bool
     {
-        $slaDias = \App\Models\Configuracao::getInt('sla_dias_conferencia', 5);
+        $slaDias = Configuracao::getInt('sla_dias_conferencia', SystemDefaults::SLA_DIAS_CONFERENCIA);
+
         return $this->diasPendente() >= $slaDias;
     }
 
@@ -186,7 +207,7 @@ class LancamentoSetorial extends Model
      */
     public function contarRejeicoes(): int
     {
-        return \App\Models\AuditLog::where('modelo', 'LancamentoSetorial')
+        return AuditLog::where('modelo', 'LancamentoSetorial')
             ->where('modelo_id', $this->id)
             ->where('acao', 'REJEITOU')
             ->count();
@@ -197,7 +218,8 @@ class LancamentoSetorial extends Model
      */
     public function atingiuLimiteRejeicoes(): bool
     {
-        $limite = \App\Models\Configuracao::getInt('limite_rejeicoes_lancamento', 3);
+        $limite = Configuracao::getInt('limite_rejeicoes_lancamento', SystemDefaults::LIMITE_REJEICOES_LANCAMENTO);
+
         return $this->contarRejeicoes() >= $limite;
     }
 
@@ -218,11 +240,12 @@ class LancamentoSetorial extends Model
 
     public function scopeSlaUltrapassado($query)
     {
-        $slaDias = \App\Models\Configuracao::getInt('sla_dias_conferencia', 5);
+        $slaDias = Configuracao::getInt('sla_dias_conferencia', SystemDefaults::SLA_DIAS_CONFERENCIA);
+
         return $query->whereIn('status', [
-                \App\Enums\LancamentoStatus::PENDENTE->value,
-                \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL->value,
-            ])
+            LancamentoStatus::PENDENTE->value,
+            LancamentoStatus::CONFERIDO_SETORIAL->value,
+        ])
             ->where('created_at', '<=', now()->subDays($slaDias));
     }
 
@@ -235,10 +258,10 @@ class LancamentoSetorial extends Model
             ->where('evento_id', $eventoId)
             ->where('competencia', $competencia)
             ->whereNotIn('status', [
-            \App\Enums\LancamentoStatus::REJEITADO->value,
-            \App\Enums\LancamentoStatus::ESTORNADO->value,
-            \App\Enums\LancamentoStatus::CANCELADO->value,
-        ]);
+                LancamentoStatus::REJEITADO->value,
+                LancamentoStatus::ESTORNADO->value,
+                LancamentoStatus::CANCELADO->value,
+            ]);
 
         if ($ignorarId) {
             $query->where('id', '!=', $ignorarId);
@@ -255,9 +278,9 @@ class LancamentoSetorial extends Model
         $query = self::where('servidor_id', $servidorId)
             ->where('competencia', $competencia)
             ->whereNotIn('status', [
-                \App\Enums\LancamentoStatus::REJEITADO->value,
-                \App\Enums\LancamentoStatus::ESTORNADO->value,
-                \App\Enums\LancamentoStatus::CANCELADO->value,
+                LancamentoStatus::REJEITADO->value,
+                LancamentoStatus::ESTORNADO->value,
+                LancamentoStatus::CANCELADO->value,
             ]);
 
         if ($ignorarId) {
@@ -286,9 +309,9 @@ class LancamentoSetorial extends Model
         $query = self::where('servidor_id', $servidorId)
             ->where('competencia', $competencia)
             ->whereNotIn('status', [
-                \App\Enums\LancamentoStatus::REJEITADO->value,
-                \App\Enums\LancamentoStatus::ESTORNADO->value,
-                \App\Enums\LancamentoStatus::CANCELADO->value,
+                LancamentoStatus::REJEITADO->value,
+                LancamentoStatus::ESTORNADO->value,
+                LancamentoStatus::CANCELADO->value,
             ]);
 
         if ($ignorarId) {
@@ -298,10 +321,10 @@ class LancamentoSetorial extends Model
         $existentes = $query->get(['porcentagem_insalubridade', 'porcentagem_periculosidade']);
 
         foreach ($existentes as $existente) {
-            if (!empty($porcentagemInsalubridade) && !empty($existente->porcentagem_periculosidade)) {
+            if (! empty($porcentagemInsalubridade) && ! empty($existente->porcentagem_periculosidade)) {
                 return 'Servidor já possui lançamento com periculosidade nesta competência. Insalubridade e periculosidade não podem coexistir.';
             }
-            if (!empty($porcentagemPericulosidade) && !empty($existente->porcentagem_insalubridade)) {
+            if (! empty($porcentagemPericulosidade) && ! empty($existente->porcentagem_insalubridade)) {
                 return 'Servidor já possui lançamento com insalubridade nesta competência. Periculosidade e insalubridade não podem coexistir.';
             }
         }
@@ -315,31 +338,31 @@ class LancamentoSetorial extends Model
      */
     public function scopeFiltrar($query, array $filtros): void
     {
-        if (!empty($filtros['competencia'])) {
+        if (! empty($filtros['competencia'])) {
             $query->where('competencia', $filtros['competencia']);
         }
 
-        if (!empty($filtros['status'])) {
+        if (! empty($filtros['status'])) {
             $query->where('status', $filtros['status']);
         }
 
-        if (!empty($filtros['setor_id'])) {
+        if (! empty($filtros['setor_id'])) {
             $query->where('setor_origem_id', $filtros['setor_id']);
         }
 
-        if (!empty($filtros['servidor_id'])) {
+        if (! empty($filtros['servidor_id'])) {
             $query->where('servidor_id', $filtros['servidor_id']);
         }
 
-        if (!empty($filtros['evento_id'])) {
+        if (! empty($filtros['evento_id'])) {
             $query->where('evento_id', $filtros['evento_id']);
         }
 
-        if (!empty($filtros['busca'])) {
+        if (! empty($filtros['busca'])) {
             $busca = addcslashes($filtros['busca'], '%_');
             $query->whereHas('servidor', function ($q) use ($busca) {
                 $q->where('nome', 'like', "%{$busca}%")
-                  ->orWhere('matricula', 'like', "%{$busca}%");
+                    ->orWhere('matricula', 'like', "%{$busca}%");
             });
         }
     }

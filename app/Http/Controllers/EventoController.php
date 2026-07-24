@@ -2,23 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreEventoRequest;
+use App\Http\Requests\UpdateEventoRequest;
 use App\Models\EventoFolha;
-use App\Models\Setor;
 use App\Services\AuditService;
-
-use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class EventoController extends Controller
 {
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware('role:CENTRAL,ADMIN');
+        $this->middleware('role:CENTRAL|ADMIN');
     }
 
     public function index(): View
     {
+        $this->authorize('viewAny', EventoFolha::class);
+
         $eventos = EventoFolha::orderBy('descricao')->paginate(20);
 
         return view('admin.eventos.index', [
@@ -28,14 +30,16 @@ class EventoController extends Controller
 
     public function create(): View
     {
+        $this->authorize('create', EventoFolha::class);
+
         return view('admin.eventos.create');
     }
 
-    public function store(\App\Http\Requests\StoreEventoRequest $request): RedirectResponse
+    public function store(StoreEventoRequest $request): RedirectResponse
     {
-        $evento = EventoFolha::create($request->validated());
+        $evento = EventoFolha::create($this->dadosValidados($request->validated()));
 
-        AuditService::criou('EventoFolha', $evento->id, 
+        AuditService::criou('EventoFolha', $evento->id,
             "Evento criado: {$evento->codigo_evento} — {$evento->descricao}",
             $evento->toArray()
         );
@@ -44,9 +48,11 @@ class EventoController extends Controller
             ->route('admin.eventos.index')
             ->with('success', 'Evento criado com sucesso!');
     }
-    
+
     public function show(EventoFolha $evento): View
     {
+        $this->authorize('view', $evento);
+
         $evento->load('setoresComDireito');
 
         return view('admin.eventos.show', [
@@ -56,15 +62,17 @@ class EventoController extends Controller
 
     public function edit(EventoFolha $evento): View
     {
+        $this->authorize('update', $evento);
+
         return view('admin.eventos.edit', [
             'evento' => $evento,
         ]);
     }
 
-    public function update(\App\Http\Requests\UpdateEventoRequest $request, EventoFolha $evento): RedirectResponse
+    public function update(UpdateEventoRequest $request, EventoFolha $evento): RedirectResponse
     {
         $antes = $evento->toArray();
-        $evento->update($request->validated());
+        $evento->update($this->dadosValidados($request->validated()));
 
         AuditService::editouComDiff('EventoFolha', $evento->id, $antes, $evento->fresh()->toArray(),
             "Evento atualizado: {$evento->codigo_evento}"
@@ -77,6 +85,8 @@ class EventoController extends Controller
 
     public function destroy(EventoFolha $evento): RedirectResponse
     {
+        $this->authorize('delete', $evento);
+
         if ($evento->lancamentos()->count() > 0) {
             return redirect()
                 ->route('admin.eventos.index')
@@ -95,5 +105,19 @@ class EventoController extends Controller
         return redirect()
             ->route('admin.eventos.index')
             ->with('success', 'Evento deletado com sucesso!');
+    }
+
+    /** @param array<string, mixed> $dados */
+    private function dadosValidados(array $dados): array
+    {
+        if ($dados['regra_validada']) {
+            $dados['regra_validada_por_id'] = auth()->id();
+            $dados['regra_validada_em'] = now();
+        } else {
+            $dados['regra_validada_por_id'] = null;
+            $dados['regra_validada_em'] = null;
+        }
+
+        return $dados;
     }
 }

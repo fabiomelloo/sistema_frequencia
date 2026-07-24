@@ -5,7 +5,7 @@
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="fw-bold mb-0"><i class="bi bi-clipboard-check me-2"></i>Painel de Conferência</h4>
+    <h1 class="h4 fw-bold mb-0"><i class="bi bi-clipboard-check me-2"></i>Painel de Conferência</h1>
     <div class="d-flex gap-2">
         @if ($statusAtual === 'CONFERIDO')
             <form action="{{ route('painel.exportar') }}" method="POST" style="display: inline;">
@@ -257,9 +257,9 @@
                             <p class="text-muted mb-2">
                                 <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
                             </p>
-                            @if ($lancamento->isEstornoSolicitado() && $lancamento->motivo_rejeicao)
+                            @if ($lancamento->isEstornoSolicitado() && $lancamento->motivo_estorno)
                                 <div class="alert alert-info small mb-3">
-                                    <strong>Motivo da solicitação:</strong> {{ $lancamento->motivo_rejeicao }}
+                                    <strong>Motivo da solicitação:</strong> {{ $lancamento->motivo_estorno }}
                                 </div>
                             @endif
                             <div class="mb-3">

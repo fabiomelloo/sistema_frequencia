@@ -4,9 +4,12 @@
 @section('description', 'Painel administrativo com visão geral do sistema')
 
 @section('content')
-<div class="mb-4">
-    <h4 class="fw-bold"><i class="bi bi-speedometer2 me-2"></i>Dashboard Central</h4>
-    <p class="text-muted mb-0">Competência atual: <strong>{{ $competenciaAtual }}</strong></p>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h4 fw-bold"><i class="bi bi-speedometer2 me-2"></i>Dashboard Central</h1>
+        <p class="text-muted mb-0">Competência atual: <strong>{{ $competenciaAtual }}</strong></p>
+    </div>
+    <a href="{{ route('painel-frequencias.index') }}" class="btn btn-primary"><i class="bi bi-calendar2-check me-1"></i>Conferir frequências</a>
 </div>
 
 {{-- KPIs globais --}}

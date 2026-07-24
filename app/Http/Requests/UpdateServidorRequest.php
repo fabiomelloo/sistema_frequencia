@@ -8,24 +8,20 @@ class UpdateServidorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        $servidor = $this->route('servidor');
+
+        return $servidor && ($this->user()?->can('update', $servidor) ?? false);
     }
 
     protected function prepareForValidation(): void
     {
-        // Transformar checkbox ausente em false
-        // Limpar CPF (remover formatação)
+        // Limpar CPF (remover formatação).
         $cpf = $this->input('cpf');
         if ($cpf) {
             $this->merge([
                 'cpf' => preg_replace('/\D/', '', $cpf),
             ]);
         }
-
-        $this->merge([
-            'ativo' => $this->has('ativo'),
-            'origem_registro' => $this->input('origem_registro') ?? $this->route('servidor')->origem_registro ?? 'MANUAL',
-        ]);
     }
 
     public function rules(): array
@@ -33,25 +29,20 @@ class UpdateServidorRequest extends FormRequest
         $servidorId = $this->route('servidor')->id;
 
         return [
-            'matricula' => ['required', 'string', 'max:50', 'unique:servidores,matricula,' . $servidorId],
+            'matricula' => ['required', 'string', 'max:50', 'unique:servidores,matricula,'.$servidorId],
             'cpf' => [
                 'nullable',
                 'string',
                 'size:11',
                 'regex:/^\d{11}$/',
-                'unique:servidores,cpf,' . $servidorId,
+                'unique:servidores,cpf,'.$servidorId,
                 function ($attribute, $value, $fail) {
-                    if ($value && !$this->validarCpf($value)) {
+                    if ($value && ! $this->validarCpf($value)) {
                         $fail('O CPF informado é inválido.');
                     }
                 },
             ],
             'nome' => ['required', 'string', 'max:255'],
-            'setor_id' => ['required', 'exists:setores,id'],
-            'origem_registro' => ['nullable', 'string', 'max:255'],
-            'ativo' => ['required', 'boolean'],
-            'funcao_vigia' => ['nullable', 'boolean'],
-            'trabalha_noturno' => ['nullable', 'boolean'],
         ];
     }
 
@@ -102,9 +93,6 @@ class UpdateServidorRequest extends FormRequest
             'matricula.max' => 'A matrícula não pode ter mais de 50 caracteres.',
             'nome.required' => 'O nome é obrigatório.',
             'nome.max' => 'O nome não pode ter mais de 255 caracteres.',
-            'setor_id.required' => 'O setor é obrigatório.',
-            'setor_id.exists' => 'Setor inválido.',
-            'origem_registro.max' => 'A origem do registro não pode ter mais de 255 caracteres.',
         ];
     }
 }

@@ -15,7 +15,7 @@ enum UserRole: string
      */
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CENTRAL => 'Central',
             self::SETORIAL => 'Setorial',
             self::ADMIN => 'Administrador',
@@ -25,11 +25,25 @@ enum UserRole: string
     }
 
     /**
+     * Retorna a classe de cor da badge Bootstrap correspondente para o UI
+     */
+    public function color(): string
+    {
+        return match ($this) {
+            self::CENTRAL => 'danger',
+            self::SETORIAL => 'info',
+            self::ADMIN => 'dark',
+            self::GESTOR => 'success',
+            self::AUDITOR => 'secondary',
+        };
+    }
+
+    /**
      * Retorna descrição do papel
      */
     public function descricao(): string
     {
-        return match($this) {
+        return match ($this) {
             self::CENTRAL => 'Usuário da Central com acesso ao Painel de Conferência',
             self::SETORIAL => 'Usuário Setorial com acesso aos Lançamentos',
             self::ADMIN => 'Administrador com acesso total ao sistema',
@@ -55,6 +69,7 @@ enum UserRole: string
         foreach (self::cases() as $case) {
             $options[$case->value] = $case->label();
         }
+
         return $options;
     }
 
