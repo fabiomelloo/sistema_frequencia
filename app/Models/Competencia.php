@@ -196,34 +196,90 @@ class Competencia extends Model
     }
 
     /**
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    public function periodoAtivoDoServidor(Servidor $servidor): ?array
+    {
+        $inicio = $this->inicioPeriodo();
+        $fim = $this->fimPeriodo();
+
+        if ($servidor->data_admissao && $servidor->data_admissao->gt($inicio)) {
+            $inicio = $servidor->data_admissao->copy();
+        }
+
+        if ($servidor->data_desligamento && $servidor->data_desligamento->lt($fim)) {
+            $fim = $servidor->data_desligamento->copy();
+        }
+
+        return $inicio->lte($fim) ? [$inicio, $fim] : null;
+    }
+
+    public function diasUteisAtivosDoServidor(Servidor $servidor): int
+    {
+        $periodoAtivo = $this->periodoAtivoDoServidor($servidor);
+
+        if (! $periodoAtivo) {
+            return 0;
+        }
+
+        return $this->diasUteisNoIntervalo(...$periodoAtivo);
+    }
+
+    public function diasUteisNoPeriodo(): int
+    {
+        return $this->diasUteisNoIntervalo($this->inicioPeriodo(), $this->fimPeriodo());
+    }
+
+    public function diasUteisNoIntervalo(Carbon $inicio, Carbon $fim): int
+    {
+        return self::contarDiasUteis($inicio, $fim, $this->feriadosEntre($inicio, $fim));
+    }
+
+    public static function contarDiasUteis(Carbon $inicio, Carbon $fim, array $feriados = []): int
+    {
+        if ($inicio->gt($fim)) {
+            return 0;
+        }
+
+        $feriados = array_flip($feriados);
+        $diasUteis = 0;
+
+        for ($data = $inicio->copy(); $data->lte($fim); $data->addDay()) {
+            if (! $data->isWeekend() && ! isset($feriados[$data->format('Y-m-d')])) {
+                $diasUteis++;
+            }
+        }
+
+        return $diasUteis;
+    }
+
+    /**
      * Retorna os dias úteis do período (segunda a sexta, excluindo feriados).
      * Feriados são lidos da configuração 'feriados_YYYY' (formato: Y-m-d separados por vírgula).
      */
     public static function obterDiasUteis(string $referencia): int
     {
         try {
-            [$inicio, $fim] = self::periodoDaReferencia($referencia);
+            $competencia = self::buscarPorReferencia($referencia)
+                ?? new self(['referencia' => $referencia]);
         } catch (\Exception $e) {
             return 0;
         }
 
-        // Carregar feriados do ano a partir da configuração
+        return $competencia->diasUteisNoPeriodo();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function feriadosEntre(Carbon $inicio, Carbon $fim): array
+    {
         $feriados = [];
         foreach (range($inicio->year, $fim->year) as $ano) {
             $feriadosStr = Configuracao::get("feriados_{$ano}", '');
             $feriados = array_merge($feriados, array_filter(array_map('trim', explode(',', $feriadosStr))));
         }
 
-        $diasUteis = 0;
-        $current = $inicio->copy();
-
-        while ($current->lte($fim)) {
-            if (! $current->isWeekend() && ! in_array($current->format('Y-m-d'), $feriados)) {
-                $diasUteis++;
-            }
-            $current->addDay();
-        }
-
-        return $diasUteis;
+        return array_values(array_unique($feriados));
     }
 }
