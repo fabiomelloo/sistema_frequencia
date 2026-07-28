@@ -8,7 +8,7 @@ class EstornarLancamentoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        return $this->user()?->role?->temAcessoPainel() ?? false;
     }
 
     public function rules(): array

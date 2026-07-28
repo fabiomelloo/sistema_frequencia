@@ -2,23 +2,20 @@
 
 namespace App\Http\Controllers;
 
-
-use App\Models\LancamentoSetorial;
-use App\Models\EventoFolha;
-use App\Models\Servidor;
-use App\Models\Setor;
-use App\Models\Competencia;
-use App\Http\Requests\StoreLancamentoSetorialRequest;
-use App\Http\Requests\UpdateLancamentoSetorialRequest;
+use App\Enums\LancamentoStatus;
 use App\Http\Requests\AprovarSetorialEmLoteRequest;
 use App\Http\Requests\SolicitarEstornoRequest;
-use App\Services\RegrasLancamentoService;
+use App\Http\Requests\StoreLancamentoSetorialRequest;
+use App\Http\Requests\UpdateLancamentoSetorialRequest;
+use App\Models\Competencia;
+use App\Models\EventoFolha;
+use App\Models\LancamentoSetorial;
+use App\Models\Servidor;
 use App\Services\AuditService;
-use App\Services\NotificacaoService;
-use App\Enums\LancamentoStatus;
+use App\Services\RegrasLancamentoService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
 use InvalidArgumentException;
 
 class LancamentoSetorialController extends Controller
@@ -93,7 +90,7 @@ class LancamentoSetorialController extends Controller
             $evento = EventoFolha::findOrFail($validated['evento_id']);
             $competencia = $validated['competencia'];
 
-            if (!Competencia::referenciaAberta($competencia)) {
+            if (! Competencia::referenciaAberta($competencia)) {
                 return redirect()
                     ->back()
                     ->withInput()
@@ -108,7 +105,6 @@ class LancamentoSetorialController extends Controller
             }
 
             $regrasService->validar($servidor, $evento, $validated, null, $user->setor_id);
-
 
             $setorOrigem = $servidor->setorNaCompetencia($competencia);
 
@@ -139,7 +135,7 @@ class LancamentoSetorialController extends Controller
             return redirect()
                 ->route('lancamentos.index')
                 ->with('success', 'Lançamento criado com sucesso!');
-                
+
         } catch (InvalidArgumentException $e) {
             return redirect()
                 ->back()
@@ -167,11 +163,10 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
 
-
         $temAcesso = $lancamento->setor_origem_id === $user->setor_id
             || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
 
-        if (!$temAcesso || !$lancamento->podeSerEditado()) {
+        if (! $temAcesso || ! $lancamento->podeSerEditado()) {
             abort(403, 'Não autorizado.');
         }
 
@@ -207,19 +202,17 @@ class LancamentoSetorialController extends Controller
         try {
             $user = auth()->user();
 
-
             $temAcesso = $lancamento->setor_origem_id === $user->setor_id
                 || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
 
-            if (!$temAcesso || !$lancamento->podeSerEditado()) {
+            if (! $temAcesso || ! $lancamento->podeSerEditado()) {
                 abort(403, 'Não autorizado.');
             }
-
 
             if ($lancamento->isRejeitado() && $lancamento->atingiuLimiteRejeicoes()) {
                 return redirect()
                     ->back()
-                    ->withErrors(['error' => "Este lançamento atingiu o limite de rejeições e não pode mais ser re-submetido. Crie um novo lançamento."]);
+                    ->withErrors(['error' => 'Este lançamento atingiu o limite de rejeições e não pode mais ser re-submetido. Crie um novo lançamento.']);
             }
 
             $validated = $request->validated();
@@ -269,7 +262,7 @@ class LancamentoSetorialController extends Controller
             return redirect()
                 ->route('lancamentos.index')
                 ->with('success', 'Lançamento atualizado com sucesso!');
-                
+
         } catch (InvalidArgumentException $e) {
             return redirect()
                 ->back()
@@ -282,11 +275,10 @@ class LancamentoSetorialController extends Controller
     {
         $user = auth()->user();
 
-
         $temAcesso = $lancamento->setor_origem_id === $user->setor_id
             || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
 
-        if (!$temAcesso || !$lancamento->podeSerEditado()) {
+        if (! $temAcesso || ! $lancamento->podeSerEditado()) {
             abort(403, 'Não autorizado.');
         }
 
@@ -328,8 +320,7 @@ class LancamentoSetorialController extends Controller
             abort(403, 'Não autorizado.');
         }
 
-
-        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+        if (! Competencia::referenciaAberta($lancamento->competencia)) {
             return redirect()
                 ->route('lancamentos.lixeira')
                 ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível restaurar.']);
@@ -338,7 +329,7 @@ class LancamentoSetorialController extends Controller
         $lancamento->restore();
 
         AuditService::registrar('RESTAUROU', 'LancamentoSetorial', $lancamento->id,
-            "Lançamento restaurado da lixeira"
+            'Lançamento restaurado da lixeira'
         );
 
         return redirect()
@@ -354,12 +345,11 @@ class LancamentoSetorialController extends Controller
             abort(403, 'Não autorizado.');
         }
 
-        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+        if (! Competencia::referenciaAberta($lancamento->competencia)) {
             return redirect()
                 ->back()
                 ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível conferir.']);
         }
-
 
         $criadorId = \App\Models\AuditLog::where('modelo', 'LancamentoSetorial')
             ->where('modelo_id', $lancamento->id)
@@ -371,11 +361,10 @@ class LancamentoSetorialController extends Controller
                 ->withErrors(['error' => 'Você não pode conferir um lançamento que você mesmo criou. Peça a outro usuário do setor.']);
         }
 
-
-        if (!$lancamento->isPendente() && !$lancamento->isEstornado()) {
+        if (! $lancamento->isPendente()) {
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Apenas lançamentos PENDENTES ou ESTORNADOS podem ser conferidos pelo setor.']);
+                ->withErrors(['error' => 'Apenas lançamentos PENDENTES podem ser conferidos pelo setor.']);
         }
 
         $lancamento->status = LancamentoStatus::CONFERIDO_SETORIAL;
@@ -423,7 +412,7 @@ class LancamentoSetorialController extends Controller
         $temAcesso = $lancamento->setor_origem_id === $user->setor_id
             || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
 
-        if (!$temAcesso || !$lancamento->podeSerCancelado()) {
+        if (! $temAcesso || ! $lancamento->podeSerCancelado()) {
             abort(403, 'Não autorizado ou lançamento não pode ser cancelado.');
         }
 
@@ -439,30 +428,28 @@ class LancamentoSetorialController extends Controller
             ->with('success', 'Lançamento cancelado de forma definitiva!');
     }
 
-    public function solicitarEstorno(SolicitarEstornoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
-    {
+    public function solicitarEstorno(
+        SolicitarEstornoRequest $request,
+        LancamentoSetorial $lancamento,
+        \App\Services\EstornoLancamentoService $service
+    ): RedirectResponse {
         $user = auth()->user();
 
         $temAcesso = $lancamento->setor_origem_id === $user->setor_id
             || \App\Models\Delegacao::temDelegacaoAtiva($user->id, $lancamento->setor_origem_id);
 
-        if (!$temAcesso || !$lancamento->podeSolicitarEstorno()) {
+        if (! $temAcesso || ! $lancamento->podeSolicitarEstorno()) {
             abort(403, 'Não autorizado ou lançamento não pode ser estornado.');
         }
 
-        $validated = $request->validated();
-
-        $lancamento->status = LancamentoStatus::ESTORNO_SOLICITADO;
-        $lancamento->motivo_estorno = $validated['motivo_estorno'];
-        $lancamento->save();
-
-        AuditService::registrar('SOLICITOU_ESTORNO', 'LancamentoSetorial', $lancamento->id,
-            "Solicitação de Estorno registrada: servidor_id={$lancamento->servidor_id}. Motivo: {$validated['motivo_estorno']}"
-        );
+        try {
+            $service->solicitar($lancamento, $request->validated('motivo_estorno'));
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        }
 
         return redirect()
             ->back()
             ->with('success', 'Solicitação de estorno enviada para a Central!');
     }
 }
-

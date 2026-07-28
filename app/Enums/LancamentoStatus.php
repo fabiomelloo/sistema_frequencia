@@ -15,7 +15,7 @@ enum LancamentoStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDENTE => 'Pendente',
             self::CONFERIDO_SETORIAL => 'Conferido (Setorial)',
             self::CONFERIDO => 'Conferido (Central)',
@@ -29,7 +29,7 @@ enum LancamentoStatus: string
 
     public function cor(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDENTE => 'warning',
             self::CONFERIDO_SETORIAL => 'info',
             self::CONFERIDO => 'success',
@@ -48,7 +48,7 @@ enum LancamentoStatus: string
 
     public function podeSerAprovadoSetorial(): bool
     {
-        return in_array($this, [self::PENDENTE, self::ESTORNADO]); // Assuming Estornado needs setorial approval again
+        return $this === self::PENDENTE;
     }
 
     public function podeSerAprovadoCentral(): bool
@@ -58,7 +58,7 @@ enum LancamentoStatus: string
 
     public function podeSerRejeitado(): bool
     {
-        return in_array($this, [self::PENDENTE, self::CONFERIDO_SETORIAL, self::ESTORNADO]);
+        return in_array($this, [self::PENDENTE, self::CONFERIDO_SETORIAL]);
     }
 
     public function podeSerExportado(): bool

@@ -11,6 +11,7 @@ class LancamentoSetorial extends Model
     use SoftDeletes;
 
     protected $table = 'lancamentos_setoriais';
+
     protected $fillable = [
         'servidor_id',
         'evento_id',
@@ -118,7 +119,6 @@ class LancamentoSetorial extends Model
         return in_array($this->status, [
             \App\Enums\LancamentoStatus::PENDENTE,
             \App\Enums\LancamentoStatus::REJEITADO,
-            \App\Enums\LancamentoStatus::ESTORNADO,
         ]);
     }
 
@@ -145,9 +145,10 @@ class LancamentoSetorial extends Model
      */
     public function diasPendente(): int
     {
-        if (!$this->isPendente() && !$this->isConferidoSetorial()) {
+        if (! $this->isPendente() && ! $this->isConferidoSetorial()) {
             return 0;
         }
+
         return (int) $this->created_at->diffInDays(now());
     }
 
@@ -159,6 +160,7 @@ class LancamentoSetorial extends Model
         $slaDias = \App\Models\Configuracao::getInt('sla_dias_conferencia', 5);
         $alertaDias = \App\Models\Configuracao::getInt('sla_dias_alerta', 3);
         $pendente = $this->diasPendente();
+
         return $pendente >= $alertaDias && $pendente < $slaDias;
     }
 
@@ -168,6 +170,7 @@ class LancamentoSetorial extends Model
     public function slaUltrapassado(): bool
     {
         $slaDias = \App\Models\Configuracao::getInt('sla_dias_conferencia', 5);
+
         return $this->diasPendente() >= $slaDias;
     }
 
@@ -198,6 +201,7 @@ class LancamentoSetorial extends Model
     public function atingiuLimiteRejeicoes(): bool
     {
         $limite = \App\Models\Configuracao::getInt('limite_rejeicoes_lancamento', 3);
+
         return $this->contarRejeicoes() >= $limite;
     }
 
@@ -219,10 +223,11 @@ class LancamentoSetorial extends Model
     public function scopeSlaUltrapassado($query)
     {
         $slaDias = \App\Models\Configuracao::getInt('sla_dias_conferencia', 5);
+
         return $query->whereIn('status', [
-                \App\Enums\LancamentoStatus::PENDENTE->value,
-                \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL->value,
-            ])
+            \App\Enums\LancamentoStatus::PENDENTE->value,
+            \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL->value,
+        ])
             ->where('created_at', '<=', now()->subDays($slaDias));
     }
 
@@ -235,10 +240,10 @@ class LancamentoSetorial extends Model
             ->where('evento_id', $eventoId)
             ->where('competencia', $competencia)
             ->whereNotIn('status', [
-            \App\Enums\LancamentoStatus::REJEITADO->value,
-            \App\Enums\LancamentoStatus::ESTORNADO->value,
-            \App\Enums\LancamentoStatus::CANCELADO->value,
-        ]);
+                \App\Enums\LancamentoStatus::REJEITADO->value,
+                \App\Enums\LancamentoStatus::ESTORNADO->value,
+                \App\Enums\LancamentoStatus::CANCELADO->value,
+            ]);
 
         if ($ignorarId) {
             $query->where('id', '!=', $ignorarId);
@@ -298,10 +303,10 @@ class LancamentoSetorial extends Model
         $existentes = $query->get(['porcentagem_insalubridade', 'porcentagem_periculosidade']);
 
         foreach ($existentes as $existente) {
-            if (!empty($porcentagemInsalubridade) && !empty($existente->porcentagem_periculosidade)) {
+            if (! empty($porcentagemInsalubridade) && ! empty($existente->porcentagem_periculosidade)) {
                 return 'Servidor já possui lançamento com periculosidade nesta competência. Insalubridade e periculosidade não podem coexistir.';
             }
-            if (!empty($porcentagemPericulosidade) && !empty($existente->porcentagem_insalubridade)) {
+            if (! empty($porcentagemPericulosidade) && ! empty($existente->porcentagem_insalubridade)) {
                 return 'Servidor já possui lançamento com insalubridade nesta competência. Periculosidade e insalubridade não podem coexistir.';
             }
         }
@@ -315,31 +320,31 @@ class LancamentoSetorial extends Model
      */
     public function scopeFiltrar($query, array $filtros): void
     {
-        if (!empty($filtros['competencia'])) {
+        if (! empty($filtros['competencia'])) {
             $query->where('competencia', $filtros['competencia']);
         }
 
-        if (!empty($filtros['status'])) {
+        if (! empty($filtros['status'])) {
             $query->where('status', $filtros['status']);
         }
 
-        if (!empty($filtros['setor_id'])) {
+        if (! empty($filtros['setor_id'])) {
             $query->where('setor_origem_id', $filtros['setor_id']);
         }
 
-        if (!empty($filtros['servidor_id'])) {
+        if (! empty($filtros['servidor_id'])) {
             $query->where('servidor_id', $filtros['servidor_id']);
         }
 
-        if (!empty($filtros['evento_id'])) {
+        if (! empty($filtros['evento_id'])) {
             $query->where('evento_id', $filtros['evento_id']);
         }
 
-        if (!empty($filtros['busca'])) {
+        if (! empty($filtros['busca'])) {
             $busca = addcslashes($filtros['busca'], '%_');
             $query->whereHas('servidor', function ($q) use ($busca) {
                 $q->where('nome', 'like', "%{$busca}%")
-                  ->orWhere('matricula', 'like', "%{$busca}%");
+                    ->orWhere('matricula', 'like', "%{$busca}%");
             });
         }
     }

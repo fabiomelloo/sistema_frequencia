@@ -1,22 +1,22 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\LancamentoSetorialController;
-use App\Http\Controllers\PainelConferenciaController;
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\UsersController;
-use App\Http\Controllers\SetorController;
-use App\Http\Controllers\ServidorController;
-use App\Http\Controllers\EventoController;
-use App\Http\Controllers\PermissaoController;
-use App\Http\Controllers\PerfilController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AuditLogController;
-use App\Http\Controllers\NotificacaoController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CompetenciaController;
-use App\Http\Controllers\RelatorioController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DelegacaoController;
+use App\Http\Controllers\EventoController;
 use App\Http\Controllers\ImportacaoController;
+use App\Http\Controllers\LancamentoSetorialController;
+use App\Http\Controllers\NotificacaoController;
+use App\Http\Controllers\PainelConferenciaController;
+use App\Http\Controllers\PerfilController;
+use App\Http\Controllers\PermissaoController;
+use App\Http\Controllers\RelatorioController;
+use App\Http\Controllers\ServidorController;
+use App\Http\Controllers\SetorController;
+use App\Http\Controllers\UsersController;
+use Illuminate\Support\Facades\Route;
 
 // Rotas públicas
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
@@ -28,7 +28,7 @@ Route::get('/', [AuthController::class, 'home'])->middleware('auth')->name('home
 
 // Middleware de autenticação
 Route::middleware(['auth'])->group(function () {
-    
+
     // ===== DASHBOARD =====
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
@@ -44,9 +44,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{notificacao}/ler', [NotificacaoController::class, 'marcarComoLida'])->name('ler');
         Route::post('/ler-todas', [NotificacaoController::class, 'marcarTodasComoLidas'])->name('ler-todas');
     });
-    
+
     // ===== SETORIAL (role: SETORIAL) =====
-    Route::middleware(['role:SETORIAL'])->group(function () {
+    Route::middleware(['role:SETORIAL|GESTOR'])->group(function () {
         Route::prefix('lancamentos')->name('lancamentos.')->group(function () {
             Route::get('/', [LancamentoSetorialController::class, 'index'])->name('index');
             Route::get('/create', [LancamentoSetorialController::class, 'create'])->name('create');
@@ -78,12 +78,11 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/{lancamento}/cancelar', [LancamentoSetorialController::class, 'cancelar'])->name('cancelar');
             Route::post('/{lancamento}/solicitar-estorno', [LancamentoSetorialController::class, 'solicitarEstorno'])->name('solicitar-estorno');
 
-
         });
     });
 
     // ===== CENTRAL (role: CENTRAL) =====
-    Route::middleware(['role:CENTRAL'])->group(function () {
+    Route::middleware(['role:CENTRAL|ADMIN'])->group(function () {
         Route::prefix('painel')->name('painel.')->group(function () {
             Route::get('/', [PainelConferenciaController::class, 'index'])->name('index');
             Route::post('/exportar', [PainelConferenciaController::class, 'exportar'])->name('exportar');
@@ -100,6 +99,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/{lancamento}/estornar', [PainelConferenciaController::class, 'estornar'])
                 ->whereNumber('lancamento')
                 ->name('estornar');
+            Route::post('/{lancamento}/estorno/recusar', [PainelConferenciaController::class, 'recusarEstorno'])
+                ->whereNumber('lancamento')
+                ->name('estorno.recusar');
         });
 
         // ===== PAINEL ADMINISTRATIVO =====
@@ -147,4 +149,3 @@ Route::middleware(['auth'])->group(function () {
         });
     });
 });
-

@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
-use App\Models\Competencia;
-use App\Models\LancamentoSetorial;
-use App\Models\Configuracao;
 use App\Enums\CompetenciaStatus;
 use App\Enums\LancamentoStatus;
+use App\Models\Competencia;
+use App\Models\Configuracao;
+use App\Models\LancamentoSetorial;
 use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
 
 class CompetenciaService
 {
@@ -18,22 +17,28 @@ class CompetenciaService
     public function abrir(string $referencia, ?string $dataLimite = null): Competencia
     {
         $existente = Competencia::buscarPorReferencia($referencia);
-        
+
         if ($existente && $existente->estaAberta()) {
             throw new \InvalidArgumentException("A competência {$referencia} já está aberta.");
         }
 
         if ($existente && $existente->estaFechada()) {
-            // Regra #13: alertar se existem lançamentos exportados
-            $exportados = LancamentoSetorial::where('competencia', $referencia)
-                ->where('status', LancamentoStatus::EXPORTADO->value)
-                ->count();
+            $impedimentos = LancamentoSetorial::where('competencia', $referencia)
+                ->whereIn('status', [
+                    LancamentoStatus::EXPORTADO->value,
+                    LancamentoStatus::ESTORNO_SOLICITADO->value,
+                ])
+                ->selectRaw('status, COUNT(*) as total')
+                ->groupBy('status')
+                ->pluck('total', 'status');
+            $exportados = (int) ($impedimentos[LancamentoStatus::EXPORTADO->value] ?? 0);
+            $solicitados = (int) ($impedimentos[LancamentoStatus::ESTORNO_SOLICITADO->value] ?? 0);
 
-            if ($exportados > 0) {
+            if ($exportados > 0 || $solicitados > 0) {
                 throw new \InvalidArgumentException(
-                    "A competência {$referencia} possui {$exportados} lançamento(s) já exportado(s). " .
-                    "Reabrir pode causar inconsistências com a folha de pagamento. " .
-                    "Estorne os lançamentos exportados antes de reabrir."
+                    "Não é possível reabrir a competência {$referencia}: existem {$exportados} lançamento(s) exportado(s) ".
+                    "e {$solicitados} solicitação(ões) de estorno pendente(s). ".
+                    'Solicite os estornos necessários e aguarde a conclusão pela Central antes de reabrir.'
                 );
             }
 
@@ -43,6 +48,7 @@ class CompetenciaService
             $existente->fechada_por = null;
             $existente->fechada_em = null;
             $existente->save();
+
             return $existente;
         }
 
@@ -74,20 +80,20 @@ class CompetenciaService
 
         if ($pendentes > 0) {
             throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. " .
+                "Não é possível fechar a competência {$competencia->referencia}. ".
                 "Existem {$pendentes} lançamento(s) pendente(s) de conferência."
             );
         }
 
-        $estornados = LancamentoSetorial::where('competencia', $competencia->referencia)
-            ->where('status', LancamentoStatus::ESTORNADO->value)
+        $estornosPendentes = LancamentoSetorial::where('competencia', $competencia->referencia)
+            ->where('status', LancamentoStatus::ESTORNO_SOLICITADO->value)
             ->count();
 
-        if ($estornados > 0) {
+        if ($estornosPendentes > 0) {
             throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. " .
-                "Existem {$estornados} lançamento(s) estornado(s) aguardando reprocessamento. " .
-                "Resolva os estornos antes de fechar."
+                "Não é possível fechar a competência {$competencia->referencia}. ".
+                "Existem {$estornosPendentes} solicitação(ões) de estorno pendente(s). ".
+                'Conclua ou recuse as solicitações antes de fechar.'
             );
         }
 
@@ -120,11 +126,11 @@ class CompetenciaService
     public function verificarSla(): array
     {
         $slaDias = Configuracao::getInt('sla_dias_conferencia', 5);
-        
+
         $atrasados = LancamentoSetorial::whereIn('status', [
-                LancamentoStatus::PENDENTE->value,
-                LancamentoStatus::CONFERIDO_SETORIAL->value,
-            ])
+            LancamentoStatus::PENDENTE->value,
+            LancamentoStatus::CONFERIDO_SETORIAL->value,
+        ])
             ->where('created_at', '<=', now()->subDays($slaDias))
             ->with(['servidor', 'evento', 'setorOrigem'])
             ->get();

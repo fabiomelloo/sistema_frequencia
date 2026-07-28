@@ -64,6 +64,8 @@
                     <option value="CONFERIDO" @selected(($filtros['status'] ?? '') == 'CONFERIDO')>Conf. Central</option>
                     <option value="REJEITADO" @selected(($filtros['status'] ?? '') == 'REJEITADO')>Rejeitado</option>
                     <option value="EXPORTADO" @selected(($filtros['status'] ?? '') == 'EXPORTADO')>Exportado</option>
+                    <option value="ESTORNO_SOLICITADO" @selected(($filtros['status'] ?? '') == 'ESTORNO_SOLICITADO')>Estorno solicitado</option>
+                    <option value="ESTORNADO" @selected(($filtros['status'] ?? '') == 'ESTORNADO')>Estornado</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -177,6 +179,15 @@
                                             <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
                                         </button>
                                     @endif
+
+                                    @if ($lancamento->isExportado())
+                                        <button type="button" class="btn btn-sm btn-outline-dark"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#solicitarEstornoModal{{ $lancamento->id }}"
+                                                title="Solicitar estorno">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -198,6 +209,40 @@
         @endif
     </div>
 </form>
+
+@foreach ($lancamentos as $lancamento)
+    @if ($lancamento->isExportado())
+        <div class="modal fade" id="solicitarEstornoModal{{ $lancamento->id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-1"></i>Solicitar Estorno</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ route('lancamentos.solicitar-estorno', $lancamento) }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <p class="text-muted">
+                                <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
+                            </p>
+                            <p class="small text-muted">
+                                A Central analisará esta solicitação. A competência só poderá ser reaberta depois da conclusão dos estornos pendentes.
+                            </p>
+                            <div class="mb-3">
+                                <label for="motivo_estorno{{ $lancamento->id }}" class="form-label fw-semibold">Motivo <span class="text-danger">*</span></label>
+                                <textarea name="motivo_estorno" id="motivo_estorno{{ $lancamento->id }}" class="form-control" rows="4" minlength="5" maxlength="1000" required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-dark">Enviar Solicitação</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+@endforeach
 
 {{-- Form Delete Hidden --}}
 <form id="deleteForm" action="" method="POST" style="display: none;">

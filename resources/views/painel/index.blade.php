@@ -59,6 +59,10 @@
                 <i class="bi bi-download me-1"></i>Exportados <span class="badge bg-white text-dark ms-1 rounded-circle">{{ $contadores['EXPORTADO'] ?? 0 }}</span>
             </a>
 
+            <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'ESTORNO_SOLICITADO'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'ESTORNO_SOLICITADO' ? 'btn-warning shadow-sm' : 'btn-outline-warning' }}">
+                <i class="bi bi-arrow-repeat me-1"></i>Estornos solicitados <span class="badge bg-dark ms-1 rounded-circle">{{ $contadores['ESTORNO_SOLICITADO'] ?? 0 }}</span>
+            </a>
+
             <a href="{{ route('painel.index', array_merge($filtros, ['status' => 'ESTORNADO'])) }}" class="btn btn-sm rounded-pill px-3 {{ $statusAtual === 'ESTORNADO' ? 'btn-dark shadow-sm' : 'btn-outline-dark' }}">
                 <i class="bi bi-arrow-counterclockwise me-1"></i>Estornados <span class="badge bg-white text-dark ms-1 rounded-circle">{{ $contadores['ESTORNADO'] ?? 0 }}</span>
             </a>
@@ -190,9 +194,12 @@
                                         </button>
                                     @endif
 
-                                    @if ($lancamento->isExportado() || $lancamento->isEstornoSolicitado())
+                                    @if ($lancamento->isEstornoSolicitado())
                                         <button type="button" class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#estornoModal{{ $lancamento->id }}" title="Estornar Exportação">
                                             <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#recusaEstornoModal{{ $lancamento->id }}" title="Recusar solicitação">
+                                            <i class="bi bi-x-lg"></i>
                                         </button>
                                     @endif
                                 </div>
@@ -243,7 +250,7 @@
         </div>
     @endif
 
-    @if ($lancamento->isExportado() || $lancamento->isEstornoSolicitado())
+    @if ($lancamento->isEstornoSolicitado())
         <div class="modal fade text-dark" id="estornoModal{{ $lancamento->id }}" tabindex="-1">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -257,9 +264,9 @@
                             <p class="text-muted mb-2">
                                 <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
                             </p>
-                            @if ($lancamento->isEstornoSolicitado() && $lancamento->motivo_rejeicao)
+                            @if ($lancamento->motivo_estorno)
                                 <div class="alert alert-info small mb-3">
-                                    <strong>Motivo da solicitação:</strong> {{ $lancamento->motivo_rejeicao }}
+                                    <strong>Motivo da solicitação:</strong> {{ $lancamento->motivo_estorno }}
                                 </div>
                             @endif
                             <div class="mb-3">
@@ -270,6 +277,33 @@
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                             <button type="submit" class="btn btn-dark"><i class="bi bi-arrow-counterclockwise me-1"></i>Confirmar Estorno</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade text-dark" id="recusaEstornoModal{{ $lancamento->id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title"><i class="bi bi-x-circle me-1"></i>Recusar Solicitação de Estorno</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ route('painel.estorno.recusar', $lancamento) }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <p class="text-muted mb-2">
+                                <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
+                            </p>
+                            <div class="mb-3">
+                                <label for="motivo_recusa{{ $lancamento->id }}" class="form-label fw-semibold">Motivo da Recusa <span class="text-danger">*</span></label>
+                                <textarea name="motivo_recusa" id="motivo_recusa{{ $lancamento->id }}" class="form-control" rows="3" minlength="10" maxlength="1000" required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle me-1"></i>Recusar Solicitação</button>
                         </div>
                     </form>
                 </div>

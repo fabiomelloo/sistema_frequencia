@@ -2,23 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\LancamentoSetorial;
-use App\Models\Setor;
-use App\Models\Servidor;
-use App\Models\EventoFolha;
-use App\Models\Competencia;
-use App\Services\GeradorTxtFolhaService;
-use App\Services\AuditService;
-use App\Services\NotificacaoService;
-use App\Http\Requests\RejeitarLancamentoRequest;
+use App\Enums\LancamentoStatus;
 use App\Http\Requests\AprovarEmLoteRequest;
 use App\Http\Requests\EstornarLancamentoRequest;
-use App\Enums\LancamentoStatus;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
+use App\Http\Requests\RecusarEstornoRequest;
+use App\Http\Requests\RejeitarLancamentoRequest;
+use App\Models\Competencia;
+use App\Models\EventoFolha;
+use App\Models\LancamentoSetorial;
+use App\Models\Setor;
+use App\Services\AuditService;
+use App\Services\GeradorTxtFolhaService;
+use App\Services\NotificacaoService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PainelConferenciaController extends Controller
@@ -27,7 +26,7 @@ class PainelConferenciaController extends Controller
     {
         $status = $request->get('status', LancamentoStatus::PENDENTE->value);
 
-        if (!in_array($status, LancamentoStatus::valores())) {
+        if (! in_array($status, LancamentoStatus::valores())) {
             $status = LancamentoStatus::PENDENTE->value;
         }
 
@@ -86,13 +85,13 @@ class PainelConferenciaController extends Controller
 
     public function aprovar(LancamentoSetorial $lancamento): RedirectResponse
     {
-        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+        if (! Competencia::referenciaAberta($lancamento->competencia)) {
             return redirect()
                 ->back()
                 ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível aprovar.']);
         }
 
-        if (!$lancamento->isConferidoSetorial()) {
+        if (! $lancamento->isConferidoSetorial()) {
             return redirect()
                 ->back()
                 ->withErrors(['error' => 'Apenas lançamentos com status CONFERIDO SETORIAL podem ser aprovados pela Central.']);
@@ -118,13 +117,13 @@ class PainelConferenciaController extends Controller
 
     public function rejeitar(RejeitarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
     {
-        if (!Competencia::referenciaAberta($lancamento->competencia)) {
+        if (! Competencia::referenciaAberta($lancamento->competencia)) {
             return redirect()
                 ->back()
                 ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível rejeitar.']);
         }
 
-        if (!$lancamento->isPendente() && !$lancamento->isConferidoSetorial()) {
+        if (! $lancamento->isPendente() && ! $lancamento->isConferidoSetorial()) {
             return redirect()
                 ->back()
                 ->withErrors(['error' => 'Apenas lançamentos PENDENTES ou CONFERIDOS SETORIAL podem ser rejeitados.']);
@@ -158,12 +157,10 @@ class PainelConferenciaController extends Controller
     public function aprovarEmLote(AprovarEmLoteRequest $request): RedirectResponse
     {
         $ids = $request->validated()['lancamento_ids'];
-        
 
         $lancamentos = LancamentoSetorial::whereIn('id', $ids)
             ->with(['servidor', 'evento'])
             ->get();
-        
 
         $porCompetencia = $lancamentos->groupBy('competencia');
 
@@ -175,14 +172,16 @@ class PainelConferenciaController extends Controller
         try {
             foreach ($porCompetencia as $competencia => $grupo) {
 
-                if (!Competencia::referenciaAberta($competencia)) {
+                if (! Competencia::referenciaAberta($competencia)) {
                     $competenciaFechada += $grupo->count();
+
                     continue;
                 }
 
                 foreach ($grupo as $lancamento) {
-                    if (!$lancamento->isConferidoSetorial()) {
+                    if (! $lancamento->isConferidoSetorial()) {
                         $ignorados++;
+
                         continue;
                     }
 
@@ -194,8 +193,8 @@ class PainelConferenciaController extends Controller
                     $lancamento->save();
 
                     AuditService::aprovou('LancamentoSetorial', $lancamento->id,
-                        "Lançamento Aprovado em Lote",
-                        $dadosAntes, 
+                        'Lançamento Aprovado em Lote',
+                        $dadosAntes,
                         $lancamento->toArray()
                     );
 
@@ -207,9 +206,10 @@ class PainelConferenciaController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
+
             return redirect()
                 ->back()
-                ->withErrors(['error' => 'Erro ao processar aprovação em lote: ' . $e->getMessage()]);
+                ->withErrors(['error' => 'Erro ao processar aprovação em lote: '.$e->getMessage()]);
         }
 
         $mensagem = "Processamento concluído: {$aprovados} aprovados.";
@@ -230,50 +230,32 @@ class PainelConferenciaController extends Controller
      * Regra #11: exige motivo obrigatório se feito direto. Se for aprovação de solicitacao, usa o motivo enviado.
      * Regra #12: notifica o setor
      */
-    public function estornar(EstornarLancamentoRequest $request, LancamentoSetorial $lancamento): RedirectResponse
-    {
-        if (!$lancamento->isExportado() && !$lancamento->isEstornoSolicitado()) {
-            return redirect()
-                ->back()
-                ->withErrors(['error' => 'Apenas lançamentos EXPORTADOS ou com ESTORNO SOLICITADO podem ser estornados.']);
+    public function estornar(
+        EstornarLancamentoRequest $request,
+        LancamentoSetorial $lancamento,
+        \App\Services\EstornoLancamentoService $service
+    ): RedirectResponse {
+        try {
+            $service->aprovar($lancamento, $request->validated('motivo_estorno'));
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
 
-        if (!Competencia::referenciaAberta($lancamento->competencia)) {
-            return redirect()
-                ->back()
-                ->withErrors(['error' => 'A competência deste lançamento está fechada. Não é possível estornar.']);
+        return redirect()->back()->with('success', 'Lançamento estornado! Setor notificado.');
+    }
+
+    public function recusarEstorno(
+        RecusarEstornoRequest $request,
+        LancamentoSetorial $lancamento,
+        \App\Services\EstornoLancamentoService $service
+    ): RedirectResponse {
+        try {
+            $service->recusar($lancamento, $request->validated('motivo_recusa'));
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
 
-        $dadosAntes = $lancamento->toArray();
-
-
-        $motivo = $request->input('motivo_estorno')
-            ?? $lancamento->motivo_estorno
-            ?? $lancamento->motivo_rejeicao
-            ?? '';
-
-
-        $lancamento->status = LancamentoStatus::ESTORNADO;
-        $lancamento->motivo_estorno = $motivo;
-        $lancamento->exportado_em = null;
-        $lancamento->id_validador = null;
-        $lancamento->validated_at = null;
-        $lancamento->conferido_setorial_por = null;
-        $lancamento->conferido_setorial_em = null;
-        $lancamento->save();
-
-        $lancamento->load(['servidor', 'evento']);
-
-        AuditService::registrar('ESTORNOU', 'LancamentoSetorial', $lancamento->id,
-            "Lançamento estornado â€” Motivo: {$motivo}",
-            $dadosAntes, $lancamento->fresh()->toArray()
-        );
-
-        NotificacaoService::lancamentoEstornado($lancamento, $motivo);
-
-        return redirect()
-            ->back()
-            ->with('success', 'Lançamento estornado! Setor notificado.');
+        return redirect()->back()->with('success', 'Solicitação de estorno recusada.');
     }
 
     public function exportar(Request $request): BinaryFileResponse|RedirectResponse
@@ -281,14 +263,14 @@ class PainelConferenciaController extends Controller
         try {
             $competencia = $request->get('competencia');
 
-            if (!$competencia) {
+            if (! $competencia) {
                 return redirect()
                     ->route('painel.index')
                     ->withErrors(['error' => 'Selecione uma competência para exportar.']);
             }
 
             // validar que a competência está aberta antes de exportar
-            if (!Competencia::referenciaAberta($competencia)) {
+            if (! Competencia::referenciaAberta($competencia)) {
                 return redirect()
                     ->route('painel.index')
                     ->withErrors(['error' => "A competência {$competencia} está fechada. Não é possível exportar."]);
@@ -305,6 +287,7 @@ class PainelConferenciaController extends Controller
 
             if ($lancamentosInvalidos->isNotEmpty()) {
                 $nomes = $lancamentosInvalidos->pluck('servidor.nome')->implode(', ');
+
                 return redirect()
                     ->route('painel.index')
                     ->withErrors(['error' => "Existem lançamentos com servidores inativos: {$nomes}. Rejeite-os antes de exportar."]);
@@ -315,7 +298,6 @@ class PainelConferenciaController extends Controller
             $nomeArquivo = DB::transaction(function () use ($servico, $competencia) {
                 $resultado = $servico->gerar($competencia);
                 $idsExportados = $resultado['idsExportados']->toArray();
-
 
                 LancamentoSetorial::whereIn('id', $idsExportados)
                     ->update([
@@ -335,7 +317,7 @@ class PainelConferenciaController extends Controller
             return response()
                 ->download(storage_path("app/{$nomeArquivo}"))
                 ->deleteFileAfterSend(false);
-                
+
         } catch (\Exception $e) {
             \Log::error('Erro ao exportar lançamentos', [
                 'erro' => $e->getMessage(),
@@ -349,4 +331,3 @@ class PainelConferenciaController extends Controller
         }
     }
 }
-
