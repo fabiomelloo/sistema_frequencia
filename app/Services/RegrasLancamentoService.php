@@ -446,7 +446,8 @@ class RegrasLancamentoService
         }
 
         $limiteTotal = (float) $limiteTotal;
-        $valorAtual = (float) ($dados['valor'] ?? $dados['valor_gratificacao'] ?? 0);
+        $valorAtual = (float) ($dados['valor'] ?? 0)
+            + (float) ($dados['valor_gratificacao'] ?? 0);
 
         if ($valorAtual <= 0) {
             return;
@@ -464,7 +465,11 @@ class RegrasLancamentoService
             $query->where('id', '!=', $lancamentoId);
         }
 
-        $valorAcumulado = (float) $query->sum('valor');
+        $valorAcumulado = (float) $query
+            ->selectRaw(
+                'COALESCE(SUM(COALESCE(valor, 0) + COALESCE(valor_gratificacao, 0)), 0) AS valor_acumulado'
+            )
+            ->value('valor_acumulado');
 
         if (($valorAcumulado + $valorAtual) > $limiteTotal) {
             throw new InvalidArgumentException(
