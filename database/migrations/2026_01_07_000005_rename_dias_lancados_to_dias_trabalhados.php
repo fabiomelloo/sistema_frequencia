@@ -9,18 +9,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Renomear coluna dias_lancados para dias_trabalhados
-        if (Schema::hasColumn('lancamentos_setoriais', 'dias_lancados')) {
-            Schema::table('lancamentos_setoriais', function (Blueprint $table) {
-                $table->renameColumn('dias_lancados', 'dias_trabalhados');
-            });
-        }
-
-        // Atualizar constraints que referenciam dias_lancados
+        // Remover antes da renomeação: MySQL 8.4 não permite renomear
+        // colunas ainda referenciadas por CHECK constraints.
         try {
             DB::statement('ALTER TABLE lancamentos_setoriais DROP CONSTRAINT chk_dias_positivos');
         } catch (Throwable $e) {
             // Ignora erro se a constraint não existir
+        }
+
+        if (Schema::hasColumn('lancamentos_setoriais', 'dias_lancados')) {
+            Schema::table('lancamentos_setoriais', function (Blueprint $table) {
+                $table->renameColumn('dias_lancados', 'dias_trabalhados');
+            });
         }
 
         try {
