@@ -58,6 +58,15 @@ Cada item deve informar no catálogo:
 - o mesmo item mensal não pode ser repetido para o mesmo servidor na mesma competência;
 - as quantidades e valores respeitam unidade e limites definidos no catálogo.
 
+### Coexistência de ocorrências
+
+- o mesmo tipo de ocorrência não pode ocupar duas vezes uma mesma data do servidor;
+- somente um estado principal pode ocupar cada data, inclusive quando os registros pertencem a competências diferentes;
+- `INCONSISTENCIA_REGISTRO` é um marcador informativo e pode coexistir com outros tipos;
+- `PONTO_FACULTATIVO` e `HORARIO_REDUZIDO` podem coexistir com `VIAGEM`, `ATIVIDADE_EXTERNA` ou `CURSO_CAPACITACAO`;
+- as demais combinações sobrepostas são bloqueadas;
+- períodos e dias específicos são formas alternativas de lançamento e não podem ser informados simultaneamente.
+
 ## Pendências administrativas
 
 - separar definitivamente vínculo de designação em `SIT`;
