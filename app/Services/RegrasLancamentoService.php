@@ -37,16 +37,17 @@ class RegrasLancamentoService
         }
 
         // 1. Competência aberta
-        $this->validarCompetenciaAberta($competencia);
+        $competenciaModel = $this->validarCompetenciaAberta($competencia);
 
         // 2. Servidor ativo na competência
         $this->validarServidorAtivo($servidor, $competencia);
 
         // 3. Dias individuais (com proporcionalidade)
-        $this->validarDias($evento, $dados, $competencia, $servidor);
+        $diasUteisAtivos = $competenciaModel->diasUteisAtivosDoServidor($servidor);
+        $this->validarDias($evento, $dados, $competenciaModel, $diasUteisAtivos);
 
         // 4. Limite de dias acumulados por servidor/competência
-        $this->validarLimiteDias($servidor, $competencia, $dados, $lancamentoId);
+        $this->validarLimiteDias($servidor, $competencia, $dados, $lancamentoId, $diasUteisAtivos);
 
         // 5. Periculosidade individual
         $this->validarPericulosidade($dados);
@@ -112,7 +113,7 @@ class RegrasLancamentoService
         }
     }
 
-    private function validarCompetenciaAberta(string $competencia): void
+    private function validarCompetenciaAberta(string $competencia): Competencia
     {
         $comp = Competencia::buscarPorReferencia($competencia);
 
@@ -134,6 +135,8 @@ class RegrasLancamentoService
                 "O prazo para lançamentos na competência {$competencia} expirou em {$comp->data_limite->format('d/m/Y')}."
             );
         }
+
+        return $comp;
     }
 
     private function validarServidorAtivo(Servidor $servidor, string $competencia): void
@@ -149,8 +152,12 @@ class RegrasLancamentoService
         }
     }
 
-    private function validarDias(EventoFolha $evento, array $dados, string $competencia, ?Servidor $servidor = null): void
-    {
+    private function validarDias(
+        EventoFolha $evento,
+        array $dados,
+        Competencia $competencia,
+        int $diasUteisAtivos
+    ): void {
         $diasTrabalhados = $dados['dias_trabalhados'] ?? null;
 
         if ($evento->exige_dias && empty($diasTrabalhados)) {
@@ -158,38 +165,16 @@ class RegrasLancamentoService
         }
 
         if (! empty($diasTrabalhados)) {
-            $diasNoMes = Carbon::createFromFormat('Y-m', $competencia)->daysInMonth;
-            $diasMaximosPermitidos = $diasNoMes;
-
-            // Dias proporcionais por admissão no meio do mês
-            if ($servidor && $servidor->data_admissao) {
-                $inicioMes = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
-                $fimMes = Carbon::createFromFormat('Y-m', $competencia)->endOfMonth();
-                if ($servidor->data_admissao->gt($inicioMes) && $servidor->data_admissao->lte($fimMes)) {
-                    $diasMaximosPermitidos = $fimMes->diffInDays($servidor->data_admissao) + 1;
-                }
-            }
-
-            // Dias proporcionais por desligamento no meio do mês
-            if ($servidor && $servidor->data_desligamento) {
-                $inicioMes = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
-                $fimMes = Carbon::createFromFormat('Y-m', $competencia)->endOfMonth();
-                if ($servidor->data_desligamento->gte($inicioMes) && $servidor->data_desligamento->lt($fimMes)) {
-                    $diasAteDesligamento = $servidor->data_desligamento->diffInDays($inicioMes) + 1;
-                    $diasMaximosPermitidos = min($diasMaximosPermitidos, $diasAteDesligamento);
-                }
-            }
-
             if ($diasTrabalhados < 1) {
                 throw new InvalidArgumentException('Dias trabalhados deve ser pelo menos 1.');
             }
 
-            if ($diasTrabalhados > $diasMaximosPermitidos) {
-                $msgExtra = $diasMaximosPermitidos < $diasNoMes
-                    ? " (proporcional — servidor ativo apenas {$diasMaximosPermitidos} dias neste mês)"
-                    : '';
+            if ($diasTrabalhados > $diasUteisAtivos) {
+                $inicio = $competencia->inicioPeriodo()->format('d/m/Y');
+                $fim = $competencia->fimPeriodo()->format('d/m/Y');
                 throw new InvalidArgumentException(
-                    "Dias trabalhados ({$diasTrabalhados}) excede o máximo permitido ({$diasMaximosPermitidos}){$msgExtra}."
+                    "Dias trabalhados ({$diasTrabalhados}) excede o máximo permitido ".
+                    "para o servidor no período da competência de {$inicio} a {$fim} ({$diasUteisAtivos} dias úteis)."
                 );
             }
 
@@ -201,33 +186,36 @@ class RegrasLancamentoService
         }
     }
 
-    private function validarLimiteDias(Servidor $servidor, string $competencia, array $dados, ?int $lancamentoId): void
-    {
+    private function validarLimiteDias(
+        Servidor $servidor,
+        string $competencia,
+        array $dados,
+        ?int $lancamentoId,
+        int $diasUteisAtivos
+    ): void {
         $diasTrabalhados = $dados['dias_trabalhados'] ?? 0;
         if ($diasTrabalhados <= 0) {
             return;
         }
 
         $diasJaLancados = LancamentoSetorial::somaDiasServidor($servidor->id, $competencia, $lancamentoId);
-        $diasUteisBase = Competencia::obterDiasUteis($competencia);
-
-        // Subtrai dias de feriados e recessos locais parametrizados, se houver lógica adicional
-        // Aqui já assumimos que obterDiasUteis() poderia descontar os feriados se implementado lá, senão usamos limite padrão.
         $diasLancados = (int) $dados['dias_trabalhados'];
 
-        if ($diasLancados > $diasUteisBase) {
+        if ($diasLancados > $diasUteisAtivos) {
             throw new InvalidArgumentException(
-                "O número de dias trabalhados ({$diasLancados}) não pode exceder os dias úteis do período ({$diasUteisBase} dias)."
+                "O número de dias trabalhados ({$diasLancados}) não pode exceder ".
+                "os dias úteis em que o servidor esteve ativo no período ({$diasUteisAtivos} dias)."
             );
         }
 
         $total = $diasJaLancados + $diasTrabalhados;
 
-        if ($total > $diasUteisBase) { // Alterado para usar diasUteisBase
+        if ($total > $diasUteisAtivos) {
             throw new InvalidArgumentException(
                 "Limite de dias excedido para {$servidor->nome} na competência {$competencia}. ".
                 "Já lançados: {$diasJaLancados} dias. Informado: {$diasTrabalhados} dias. ".
-                "Total ({$total}) ultrapassa os {$diasUteisBase} dias úteis do período."
+                "Total ({$total}) ultrapassa os {$diasUteisAtivos} dias úteis ".
+                'em que o servidor esteve ativo no período.'
             );
         }
     }
