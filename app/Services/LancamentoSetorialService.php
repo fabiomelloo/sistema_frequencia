@@ -9,6 +9,7 @@ use App\Models\LancamentoSetorial;
 use App\Models\PrazoSetorial;
 use App\Models\Servidor;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -18,71 +19,77 @@ class LancamentoSetorialService
 
     public function criar(array $dados, User $usuario): LancamentoSetorial
     {
-        return DB::transaction(function () use ($dados, $usuario): LancamentoSetorial {
-            $servidor = Servidor::findOrFail($dados['servidor_id']);
-            $evento = EventoFolha::findOrFail($dados['evento_id']);
-            $competencia = $dados['competencia'];
+        return $this->protectBusinessKey(
+            fn (): LancamentoSetorial => DB::transaction(function () use ($dados, $usuario): LancamentoSetorial {
+                $servidor = Servidor::findOrFail($dados['servidor_id']);
+                $evento = EventoFolha::findOrFail($dados['evento_id']);
+                $competencia = $dados['competencia'];
 
-            if (! Competencia::referenciaAberta($competencia)) {
-                throw new InvalidArgumentException("A competência {$competencia} está fechada para novos lançamentos.");
-            }
+                if (! Competencia::referenciaAberta($competencia)) {
+                    throw new InvalidArgumentException("A competência {$competencia} está fechada para novos lançamentos.");
+                }
 
-            $this->regras->validar($servidor, $evento, $dados, null, $usuario->setor_id, $usuario);
+                $this->regras->validar($servidor, $evento, $dados, null, $usuario->setor_id, $usuario);
 
-            $lancamento = LancamentoSetorial::create([
-                ...$this->dadosPersistiveis($dados),
-                'setor_origem_id' => $servidor->setorNaCompetencia($competencia),
-                'criado_por_id' => $usuario->id,
-                'status' => LancamentoStatus::PENDENTE,
-            ]);
+                $lancamento = LancamentoSetorial::create([
+                    ...$this->dadosPersistiveis($dados),
+                    'setor_origem_id' => $servidor->setorNaCompetencia($competencia),
+                    'criado_por_id' => $usuario->id,
+                    'status' => LancamentoStatus::PENDENTE,
+                ]);
 
-            AuditService::criou(
-                'LancamentoSetorial',
-                $lancamento->id,
-                "Lançamento criado: {$servidor->nome} - {$evento->descricao} ({$competencia})",
-                $lancamento->toArray()
-            );
+                AuditService::criou(
+                    'LancamentoSetorial',
+                    $lancamento->id,
+                    "Lançamento criado: {$servidor->nome} - {$evento->descricao} ({$competencia})",
+                    $lancamento->toArray()
+                );
 
-            return $lancamento;
-        });
+                return $lancamento;
+            }),
+            'Já existe um lançamento ativo para este servidor, evento e competência.'
+        );
     }
 
     public function atualizar(LancamentoSetorial $lancamento, array $dados, User $usuario): LancamentoSetorial
     {
-        return DB::transaction(function () use ($lancamento, $dados, $usuario): LancamentoSetorial {
-            $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
+        return $this->protectBusinessKey(
+            fn (): LancamentoSetorial => DB::transaction(function () use ($lancamento, $dados, $usuario): LancamentoSetorial {
+                $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
 
-            if ($lancamento->isRejeitado() && $lancamento->atingiuLimiteRejeicoes()) {
-                throw new InvalidArgumentException('Este lançamento atingiu o limite de rejeições e não pode mais ser re-submetido. Crie um novo lançamento.');
-            }
+                if ($lancamento->isRejeitado() && $lancamento->atingiuLimiteRejeicoes()) {
+                    throw new InvalidArgumentException('Este lançamento atingiu o limite de rejeições e não pode mais ser re-submetido. Crie um novo lançamento.');
+                }
 
-            $servidor = Servidor::findOrFail($dados['servidor_id']);
-            $evento = EventoFolha::findOrFail($dados['evento_id']);
-            $dados['competencia'] ??= $lancamento->competencia;
-            $antes = $lancamento->toArray();
+                $servidor = Servidor::findOrFail($dados['servidor_id']);
+                $evento = EventoFolha::findOrFail($dados['evento_id']);
+                $dados['competencia'] ??= $lancamento->competencia;
+                $antes = $lancamento->toArray();
 
-            $this->regras->validar($servidor, $evento, $dados, $lancamento->id, $usuario->setor_id, $usuario);
-            $lancamento->update($this->dadosPersistiveis($dados));
+                $this->regras->validar($servidor, $evento, $dados, $lancamento->id, $usuario->setor_id, $usuario);
+                $lancamento->update($this->dadosPersistiveis($dados));
 
-            if ($lancamento->isRejeitado()) {
-                $lancamento->forceFill([
-                    'status' => LancamentoStatus::PENDENTE,
-                    'motivo_rejeicao' => null,
-                    'id_validador' => null,
-                    'validated_at' => null,
-                ])->save();
-            }
+                if ($lancamento->isRejeitado()) {
+                    $lancamento->forceFill([
+                        'status' => LancamentoStatus::PENDENTE,
+                        'motivo_rejeicao' => null,
+                        'id_validador' => null,
+                        'validated_at' => null,
+                    ])->save();
+                }
 
-            AuditService::editou(
-                'LancamentoSetorial',
-                $lancamento->id,
-                "Lançamento editado: {$servidor->nome} - {$evento->descricao}",
-                $antes,
-                $lancamento->fresh()->toArray()
-            );
+                AuditService::editou(
+                    'LancamentoSetorial',
+                    $lancamento->id,
+                    "Lançamento editado: {$servidor->nome} - {$evento->descricao}",
+                    $antes,
+                    $lancamento->fresh()->toArray()
+                );
 
-            return $lancamento->fresh();
-        });
+                return $lancamento->fresh();
+            }),
+            'Outro lançamento ativo já ocupa esta combinação de servidor, evento e competência.'
+        );
     }
 
     public function excluir(LancamentoSetorial $lancamento): void
@@ -100,85 +107,51 @@ class LancamentoSetorialService
 
     public function restaurar(int $id, User $usuario): LancamentoSetorial
     {
-        return DB::transaction(function () use ($id, $usuario): LancamentoSetorial {
-            $lancamento = LancamentoSetorial::onlyTrashed()->lockForUpdate()->findOrFail($id);
+        return $this->protectBusinessKey(
+            fn (): LancamentoSetorial => DB::transaction(function () use ($id, $usuario): LancamentoSetorial {
+                $lancamento = LancamentoSetorial::onlyTrashed()->lockForUpdate()->findOrFail($id);
 
-            if ($lancamento->setor_origem_id !== $usuario->setor_id) {
-                throw new InvalidArgumentException('Não autorizado.');
-            }
+                if ($lancamento->setor_origem_id !== $usuario->setor_id) {
+                    throw new InvalidArgumentException('Não autorizado.');
+                }
 
-            $this->validarCompetenciaEPrazo($lancamento, 'restaurar');
-            $this->regras->validar(
-                $lancamento->servidor,
-                $lancamento->evento,
-                $lancamento->toArray(),
-                null,
-                $lancamento->setor_origem_id,
-                $usuario
-            );
+                $this->validarCompetenciaEPrazo($lancamento, 'restaurar');
+                $this->regras->validar(
+                    $lancamento->servidor,
+                    $lancamento->evento,
+                    $lancamento->toArray(),
+                    null,
+                    $lancamento->setor_origem_id,
+                    $usuario
+                );
 
-            $lancamento->restore();
-            AuditService::registrar('RESTAUROU', 'LancamentoSetorial', $lancamento->id, 'Lançamento restaurado da lixeira');
+                $lancamento->restore();
+                AuditService::registrar('RESTAUROU', 'LancamentoSetorial', $lancamento->id, 'Lançamento restaurado da lixeira');
 
-            return $lancamento;
-        });
+                return $lancamento;
+            }),
+            'Não é possível restaurar: já existe um lançamento ativo para este servidor, evento e competência.'
+        );
     }
 
     public function aprovarSetorial(LancamentoSetorial $lancamento, User $usuario): void
     {
-        DB::transaction(function () use ($lancamento, $usuario): void {
-            $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
+        $this->protectBusinessKey(
+            fn () => DB::transaction(function () use ($lancamento, $usuario): void {
+                $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
 
-            if ($lancamento->setor_origem_id !== $usuario->setor_id) {
-                throw new InvalidArgumentException('Não autorizado.');
-            }
-
-            $this->validarCompetenciaEPrazo($lancamento, 'conferir');
-
-            if ($lancamento->criado_por_id === $usuario->id) {
-                throw new InvalidArgumentException('Você não pode conferir um lançamento que você mesmo criou. Peça a outro usuário do setor.');
-            }
-
-            if (! $lancamento->isPendente() && ! $lancamento->isEstornado()) {
-                throw new InvalidArgumentException('Apenas lançamentos PENDENTES ou ESTORNADOS podem ser conferidos pelo setor.');
-            }
-
-            $lancamento->forceFill([
-                'status' => LancamentoStatus::CONFERIDO_SETORIAL,
-                'conferido_setorial_por' => $usuario->id,
-                'conferido_setorial_em' => now(),
-            ])->save();
-
-            $lancamento->load(['servidor', 'evento']);
-            AuditService::registrar(
-                'CONFERIU_SETORIAL',
-                'LancamentoSetorial',
-                $lancamento->id,
-                "Conferido pelo setor: {$lancamento->servidor->nome} - {$lancamento->evento->descricao}"
-            );
-        });
-    }
-
-    public function aprovarSetorialEmLote(array $ids, User $usuario): array
-    {
-        return DB::transaction(function () use ($ids, $usuario): array {
-            $aprovados = 0;
-            $ignoradosSegregacao = 0;
-
-            $lancamentos = LancamentoSetorial::query()->whereKey($ids)->lockForUpdate()->get()->keyBy('id');
-
-            foreach ($ids as $id) {
-                $lancamento = $lancamentos->get($id);
-                $statusValido = $lancamento && ($lancamento->isPendente() || $lancamento->isEstornado());
-
-                if (! $statusValido || $lancamento->setor_origem_id !== $usuario->setor_id) {
-                    continue;
+                if ($lancamento->setor_origem_id !== $usuario->setor_id) {
+                    throw new InvalidArgumentException('Não autorizado.');
                 }
 
-                if ($lancamento->criado_por_id === $usuario->id) {
-                    $ignoradosSegregacao++;
+                $this->validarCompetenciaEPrazo($lancamento, 'conferir');
 
-                    continue;
+                if ($lancamento->criado_por_id === $usuario->id) {
+                    throw new InvalidArgumentException('Você não pode conferir um lançamento que você mesmo criou. Peça a outro usuário do setor.');
+                }
+
+                if (! $lancamento->isPendente() && ! $lancamento->isEstornado()) {
+                    throw new InvalidArgumentException('Apenas lançamentos PENDENTES ou ESTORNADOS podem ser conferidos pelo setor.');
                 }
 
                 $lancamento->forceFill([
@@ -186,11 +159,54 @@ class LancamentoSetorialService
                     'conferido_setorial_por' => $usuario->id,
                     'conferido_setorial_em' => now(),
                 ])->save();
-                $aprovados++;
-            }
 
-            return compact('aprovados', 'ignoradosSegregacao');
-        });
+                $lancamento->load(['servidor', 'evento']);
+                AuditService::registrar(
+                    'CONFERIU_SETORIAL',
+                    'LancamentoSetorial',
+                    $lancamento->id,
+                    "Conferido pelo setor: {$lancamento->servidor->nome} - {$lancamento->evento->descricao}"
+                );
+            }),
+            'Não é possível conferir: já existe um lançamento ativo para este servidor, evento e competência.'
+        );
+    }
+
+    public function aprovarSetorialEmLote(array $ids, User $usuario): array
+    {
+        return $this->protectBusinessKey(
+            fn (): array => DB::transaction(function () use ($ids, $usuario): array {
+                $aprovados = 0;
+                $ignoradosSegregacao = 0;
+
+                $lancamentos = LancamentoSetorial::query()->whereKey($ids)->lockForUpdate()->get()->keyBy('id');
+
+                foreach ($ids as $id) {
+                    $lancamento = $lancamentos->get($id);
+                    $statusValido = $lancamento && ($lancamento->isPendente() || $lancamento->isEstornado());
+
+                    if (! $statusValido || $lancamento->setor_origem_id !== $usuario->setor_id) {
+                        continue;
+                    }
+
+                    if ($lancamento->criado_por_id === $usuario->id) {
+                        $ignoradosSegregacao++;
+
+                        continue;
+                    }
+
+                    $lancamento->forceFill([
+                        'status' => LancamentoStatus::CONFERIDO_SETORIAL,
+                        'conferido_setorial_por' => $usuario->id,
+                        'conferido_setorial_em' => now(),
+                    ])->save();
+                    $aprovados++;
+                }
+
+                return compact('aprovados', 'ignoradosSegregacao');
+            }),
+            'O lote contém um lançamento que conflita com outro registro ativo.'
+        );
     }
 
     public function cancelar(LancamentoSetorial $lancamento): void
@@ -247,5 +263,18 @@ class LancamentoSetorialService
             'adicional_noturno' => $dados['adicional_noturno'] ?? null,
             'observacao' => $dados['observacao'] ?? null,
         ];
+    }
+
+    private function protectBusinessKey(callable $operation, string $message): mixed
+    {
+        try {
+            return $operation();
+        } catch (UniqueConstraintViolationException $exception) {
+            if (! str_contains($exception->getMessage(), 'lancamentos_business_active_unique')) {
+                throw $exception;
+            }
+
+            throw new InvalidArgumentException($message, previous: $exception);
+        }
     }
 }

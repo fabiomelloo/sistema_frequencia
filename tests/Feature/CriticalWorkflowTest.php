@@ -23,6 +23,7 @@ use App\Models\Setor;
 use App\Models\User;
 use App\Services\ImportacaoOcorrenciaService;
 use App\Services\ImportacaoService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
@@ -89,6 +90,53 @@ class CriticalWorkflowTest extends TestCase
         $this->actingAs($usuario)
             ->get(route('lancamentos.edit', $lancamento))
             ->assertOk();
+    }
+
+    public function test_database_rejects_two_active_entries_for_the_same_business_key(): void
+    {
+        $setor = $this->criarSetor();
+        $usuario = $this->criarUsuario($setor, UserRole::SETORIAL, 'unique-entry@example.test');
+        $evento = $this->criarEvento();
+        $servidor = $this->criarServidor($setor);
+        $attributes = [
+            'servidor_id' => $servidor->id,
+            'evento_id' => $evento->id,
+            'setor_origem_id' => $setor->id,
+            'criado_por_id' => $usuario->id,
+            'competencia' => '2026-07',
+            'dias_trabalhados' => 1,
+        ];
+
+        LancamentoSetorial::create($attributes);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        LancamentoSetorial::create($attributes);
+    }
+
+    public function test_inactive_or_deleted_entry_does_not_reserve_the_business_key(): void
+    {
+        $setor = $this->criarSetor();
+        $usuario = $this->criarUsuario($setor, UserRole::SETORIAL, 'released-entry@example.test');
+        $evento = $this->criarEvento();
+        $servidor = $this->criarServidor($setor);
+        $attributes = [
+            'servidor_id' => $servidor->id,
+            'evento_id' => $evento->id,
+            'setor_origem_id' => $setor->id,
+            'criado_por_id' => $usuario->id,
+            'competencia' => '2026-07',
+            'dias_trabalhados' => 1,
+        ];
+
+        $cancelado = LancamentoSetorial::create($attributes);
+        $cancelado->forceFill(['status' => LancamentoStatus::CANCELADO])->save();
+        LancamentoSetorial::create($attributes);
+
+        LancamentoSetorial::query()->where('status', LancamentoStatus::PENDENTE)->firstOrFail()->delete();
+        $replacement = LancamentoSetorial::create($attributes);
+
+        $this->assertNotNull($replacement->id);
+        $this->assertDatabaseCount('lancamentos_setoriais', 3);
     }
 
     public function test_csv_import_records_the_authenticated_author(): void

@@ -19,6 +19,7 @@ use App\Models\Servidor;
 use App\Models\Setor;
 use App\Models\User;
 use App\Services\FolhaFrequenciaService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -194,6 +195,30 @@ class ItensMensaisFrequenciaTest extends TestCase
         ])->assertSessionHasErrors('evento_id', null, "item_{$linha->id}");
 
         $this->assertDatabaseCount('folha_frequencia_itens', 1);
+    }
+
+    public function test_database_rejects_duplicate_monthly_item_even_without_service_validation(): void
+    {
+        [$usuario, $setor, , $competencia] = $this->cenarioBase();
+        [, $linha] = $this->abrirFolha($usuario, $competencia);
+        $evento = $this->criarEvento('UNQ-MES', OrigemInformacaoItem::SETOR_MENSAL, UnidadeLancamento::HORAS);
+        $setor->eventosPermitidos()->attach($evento->id, ['ativo' => true]);
+        $attributes = [
+            'evento_id' => $evento->id,
+            'codigo_evento' => $evento->codigo_evento,
+            'sigla' => $evento->sigla,
+            'descricao' => $evento->descricao,
+            'unidade_lancamento' => $evento->unidade_lancamento,
+            'origem_informacao' => $evento->origem_informacao,
+            'quantidade' => 10,
+            'editavel_pelo_setor' => true,
+            'atualizado_por_id' => $usuario->id,
+        ];
+
+        $linha->itens()->create($attributes);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        $linha->itens()->create($attributes);
     }
 
     public function test_functional_snapshot_cannot_be_changed_or_removed_by_sector(): void

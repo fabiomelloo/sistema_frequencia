@@ -7,6 +7,7 @@ use App\Models\EventoFolha;
 use App\Models\FolhaFrequenciaItem;
 use App\Models\FolhaFrequenciaServidor;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -27,18 +28,29 @@ class FolhaFrequenciaItemService
             throw new InvalidArgumentException('O item não está autorizado para o setor da frequência.');
         }
 
-        return DB::transaction(function () use ($servidorFolha, $evento, $dados, $usuario): FolhaFrequenciaItem {
-            $duplicado = $servidorFolha->itens()->where('evento_id', $evento->id)->lockForUpdate()->exists();
-            if ($duplicado) {
-                throw new InvalidArgumentException('Este item já foi lançado para o servidor nesta competência.');
+        try {
+            return DB::transaction(function () use ($servidorFolha, $evento, $dados, $usuario): FolhaFrequenciaItem {
+                $duplicado = $servidorFolha->itens()->where('evento_id', $evento->id)->lockForUpdate()->exists();
+                if ($duplicado) {
+                    throw new InvalidArgumentException('Este item já foi lançado para o servidor nesta competência.');
+                }
+
+                return $servidorFolha->itens()->create($this->snapshotEvento($evento) + $dados + [
+                    'evento_id' => $evento->id,
+                    'editavel_pelo_setor' => true,
+                    'atualizado_por_id' => $usuario->id,
+                ]);
+            });
+        } catch (UniqueConstraintViolationException $exception) {
+            if (! str_contains($exception->getMessage(), 'folha_itens_monthly_event_unique')) {
+                throw $exception;
             }
 
-            return $servidorFolha->itens()->create($this->snapshotEvento($evento) + $dados + [
-                'evento_id' => $evento->id,
-                'editavel_pelo_setor' => true,
-                'atualizado_por_id' => $usuario->id,
-            ]);
-        });
+            throw new InvalidArgumentException(
+                'Este item já foi lançado para o servidor nesta competência.',
+                previous: $exception,
+            );
+        }
     }
 
     public function atualizar(FolhaFrequenciaItem $item, array $dados, User $usuario): FolhaFrequenciaItem
