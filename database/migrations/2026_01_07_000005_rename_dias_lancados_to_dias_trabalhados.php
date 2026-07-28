@@ -11,22 +11,13 @@ return new class extends Migration
     {
         // Remover antes da renomeação: MySQL 8.4 não permite renomear
         // colunas ainda referenciadas por CHECK constraints.
-        try {
-            DB::statement('ALTER TABLE lancamentos_setoriais DROP CONSTRAINT chk_dias_positivos');
-        } catch (Throwable $e) {
-            // Ignora erro se a constraint não existir
-        }
+        $this->removerCheck('chk_dias_positivos');
+        $this->removerCheck('chk_dias_noturnos_coerentes');
 
         if (Schema::hasColumn('lancamentos_setoriais', 'dias_lancados')) {
             Schema::table('lancamentos_setoriais', function (Blueprint $table) {
                 $table->renameColumn('dias_lancados', 'dias_trabalhados');
             });
-        }
-
-        try {
-            DB::statement('ALTER TABLE lancamentos_setoriais DROP CONSTRAINT chk_dias_noturnos_coerentes');
-        } catch (Throwable $e) {
-            // Ignora erro se a constraint não existir
         }
 
         // Recriar constraints com novo nome
@@ -54,14 +45,8 @@ return new class extends Migration
     {
 
         // Remover constraints
-        try {
-            DB::statement('ALTER TABLE lancamentos_setoriais DROP CONSTRAINT chk_dias_noturnos_coerentes');
-        } catch (Throwable $e) {
-        }
-        try {
-            DB::statement('ALTER TABLE lancamentos_setoriais DROP CONSTRAINT chk_dias_positivos');
-        } catch (Throwable $e) {
-        }
+        $this->removerCheck('chk_dias_noturnos_coerentes');
+        $this->removerCheck('chk_dias_positivos');
 
         // Renomear de volta
         Schema::table('lancamentos_setoriais', function (Blueprint $table) {
@@ -87,5 +72,16 @@ return new class extends Migration
                 OR dias_noturnos <= dias_lancados
             )
         ');
+    }
+
+    private function removerCheck(string $nome): void
+    {
+        $operacao = DB::getDriverName() === 'mysql' ? 'DROP CHECK' : 'DROP CONSTRAINT';
+
+        try {
+            DB::statement("ALTER TABLE lancamentos_setoriais {$operacao} {$nome}");
+        } catch (Throwable) {
+            // Compatibilidade com bancos antigos nos quais a constraint não existe.
+        }
     }
 };
