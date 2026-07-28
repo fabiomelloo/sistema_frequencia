@@ -21,6 +21,23 @@ enum TipoOcorrenciaFrequencia: string
     case INCONSISTENCIA_REGISTRO = 'INCONSISTENCIA_REGISTRO';
     case OUTRO = 'OUTRO';
 
+    public function podeCoexistirCom(self $outro): bool
+    {
+        if ($this === $outro) {
+            return false;
+        }
+
+        if ($this === self::INCONSISTENCIA_REGISTRO || $outro === self::INCONSISTENCIA_REGISTRO) {
+            return true;
+        }
+
+        $modificadoresEscala = [self::PONTO_FACULTATIVO, self::HORARIO_REDUZIDO];
+        $atividades = [self::VIAGEM, self::ATIVIDADE_EXTERNA, self::CURSO_CAPACITACAO];
+
+        return (in_array($this, $modificadoresEscala, true) && in_array($outro, $atividades, true))
+            || (in_array($outro, $modificadoresEscala, true) && in_array($this, $atividades, true));
+    }
+
     public function label(): string
     {
         return match ($this) {
