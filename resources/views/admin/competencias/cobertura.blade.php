@@ -50,7 +50,17 @@
                         <span class="badge text-bg-{{ $item['cor'] }}"><i class="bi bi-{{ $item['bloqueia_fechamento'] ? 'exclamation-circle' : 'check-circle' }} me-1"></i>{{ $item['label'] }}</span>
                     </div>
                     <div class="col-5 col-lg-2 small text-muted">
-                        @if ($item['folha']){{ $item['folha']->servidores_count }} registros na folha@else Folha ainda não aberta @endif
+                        @if ($item['folha'])
+                            {{ $item['servidores_na_folha'] }} registros na folha
+                            @if ($item['divergencia_populacao'])
+                                <div class="text-danger fw-semibold mt-1">
+                                    {{ count($item['servidores_faltantes']) }} faltante(s),
+                                    {{ count($item['servidores_excedentes']) }} excedente(s)
+                                </div>
+                            @endif
+                        @else
+                            Folha ainda não aberta
+                        @endif
                     </div>
                     <div class="col-lg-2 d-flex justify-content-lg-end">
                         @if ($item['folha'])
