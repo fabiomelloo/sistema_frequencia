@@ -72,6 +72,8 @@ class FolhaFrequenciaItemService
             'descricao' => $evento->descricao,
             'unidade_lancamento' => $evento->unidade_lancamento,
             'origem_informacao' => $evento->origem_informacao,
+            'gera_efeito_financeiro' => $evento->gera_efeito_financeiro,
+            'regra_validada_snapshot' => $evento->regra_validada,
             'exige_documento' => $evento->exige_documento,
         ];
     }

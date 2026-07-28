@@ -42,6 +42,11 @@ class FolhaFrequencia extends Model
         return $this->hasMany(FolhaFrequenciaServidor::class)->orderBy('nome');
     }
 
+    public function projecoesExportacao(): HasMany
+    {
+        return $this->hasMany(ProjecaoExportacaoFolha::class);
+    }
+
     public function criadoPor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'criado_por_id');

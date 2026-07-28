@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class FolhaFrequenciaItem extends Model
 {
@@ -24,6 +25,8 @@ class FolhaFrequenciaItem extends Model
         'descricao',
         'unidade_lancamento',
         'origem_informacao',
+        'gera_efeito_financeiro',
+        'regra_validada_snapshot',
         'percentual',
         'valor',
         'quantidade',
@@ -41,6 +44,8 @@ class FolhaFrequenciaItem extends Model
     protected $casts = [
         'unidade_lancamento' => UnidadeLancamento::class,
         'origem_informacao' => OrigemInformacaoItem::class,
+        'gera_efeito_financeiro' => 'boolean',
+        'regra_validada_snapshot' => 'boolean',
         'percentual' => 'decimal:2',
         'valor' => 'decimal:2',
         'quantidade' => 'decimal:2',
@@ -73,6 +78,11 @@ class FolhaFrequenciaItem extends Model
     public function evidencias(): HasMany
     {
         return $this->hasMany(EvidenciaDocumental::class, 'folha_frequencia_item_id')->latest();
+    }
+
+    public function projecaoExportacao(): HasOne
+    {
+        return $this->hasOne(ProjecaoExportacaoFolha::class, 'folha_frequencia_item_id');
     }
 
     public function conteudo(): string
