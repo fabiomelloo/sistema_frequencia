@@ -4,16 +4,22 @@ namespace App\Services;
 
 use App\Enums\CompetenciaStatus;
 use App\Enums\LancamentoStatus;
+use App\Enums\ProjecaoExportacaoStatus;
 use App\Enums\UserRole;
 use App\Models\Competencia;
 use App\Models\Configuracao;
 use App\Models\LancamentoSetorial;
+use App\Models\ProjecaoExportacaoFolha;
 use App\Models\User;
 use App\Support\SystemDefaults;
 use Illuminate\Support\Facades\Auth;
 
 class CompetenciaService
 {
+    public function __construct(
+        private readonly ProjecaoExportacaoFolhaService $projecaoExportacaoService,
+    ) {}
+
     /**
      * Abre uma nova competência.
      */
@@ -29,7 +35,11 @@ class CompetenciaService
             // Regra #13: alertar se existem lançamentos exportados
             $exportados = LancamentoSetorial::where('competencia', $referencia)
                 ->where('status', LancamentoStatus::EXPORTADO->value)
-                ->count();
+                ->count()
+                + ProjecaoExportacaoFolha::whereHas(
+                    'competencia',
+                    fn ($query) => $query->where('referencia', $referencia)
+                )->where('status', ProjecaoExportacaoStatus::EXPORTADA)->count();
 
             if ($exportados > 0) {
                 throw new \InvalidArgumentException(
@@ -72,6 +82,8 @@ class CompetenciaService
         if ($competencia->estaFechada()) {
             throw new \InvalidArgumentException("A competência {$competencia->referencia} já está fechada.");
         }
+
+        $this->projecaoExportacaoService->projetarAprovadas($competencia);
 
         $pendentes = LancamentoSetorial::where('competencia', $competencia->referencia)
             ->whereIn('status', [

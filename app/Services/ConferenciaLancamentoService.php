@@ -13,7 +13,10 @@ use Throwable;
 
 class ConferenciaLancamentoService
 {
-    public function __construct(private readonly GeradorTxtFolhaService $gerador) {}
+    public function __construct(
+        private readonly GeradorTxtFolhaService $gerador,
+        private readonly ProjecaoExportacaoFolhaService $projecaoExportacaoService,
+    ) {}
 
     public function aprovar(LancamentoSetorial $lancamento, User $usuario): void
     {
@@ -154,26 +157,25 @@ class ConferenciaLancamentoService
 
     public function exportar(string $competencia): array
     {
-        if (! Competencia::buscarPorReferencia($competencia)) {
+        $competenciaModel = Competencia::buscarPorReferencia($competencia);
+        if (! $competenciaModel) {
             throw new InvalidArgumentException("A competência {$competencia} não está cadastrada no sistema.");
         }
 
         $resultado = null;
 
         try {
-            return DB::transaction(function () use ($competencia, &$resultado): array {
+            return DB::transaction(function () use ($competencia, $competenciaModel, &$resultado): array {
+                $this->projecaoExportacaoService->projetarAprovadas($competenciaModel);
                 $resultado = $this->gerador->gerar($competencia);
                 $ids = $resultado['idsExportados']->toArray();
 
-                LancamentoSetorial::query()->whereKey($ids)->update([
-                    'status' => LancamentoStatus::EXPORTADO->value,
-                    'exportado_em' => now(),
-                ]);
-
                 AuditService::exportou(
-                    'LancamentoSetorial',
+                    'ExportacaoFolha',
                     null,
-                    "Exportados {$resultado['quantidade']} lançamentos. Arquivo: {$resultado['nomeArquivo']}"
+                    "Exportados {$resultado['quantidade']} itens ".
+                    "({$resultado['quantidadeLegada']} legados e {$resultado['quantidadeNativa']} nativos). ".
+                    "Arquivo: {$resultado['nomeArquivo']}"
                 );
                 NotificacaoService::lancamentosExportados($ids);
 

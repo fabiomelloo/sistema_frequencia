@@ -76,6 +76,11 @@ class Competencia extends Model
         return $this->hasMany(FolhaFrequencia::class);
     }
 
+    public function projecoesExportacaoFolha(): HasMany
+    {
+        return $this->hasMany(ProjecaoExportacaoFolha::class);
+    }
+
     // Status helpers
     public function estaAberta(): bool
     {

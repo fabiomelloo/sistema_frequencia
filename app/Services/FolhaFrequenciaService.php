@@ -27,6 +27,7 @@ class FolhaFrequenciaService
     public function __construct(
         private readonly FolhaFrequenciaItemService $itemService,
         private readonly CoberturaFrequenciaService $coberturaService,
+        private readonly ProjecaoExportacaoFolhaService $projecaoExportacaoService,
     ) {}
 
     public function criar(Competencia $competencia, User $user): FolhaFrequencia
@@ -181,6 +182,7 @@ class FolhaFrequenciaService
 
             $this->garantirPopulacaoIntegral($folha);
             $this->garantirConferenciaCompleta($folha);
+            $this->projecaoExportacaoService->projetar($folha);
             $folha->update([
                 'status' => FolhaFrequenciaStatus::APROVADA,
                 'conferido_por_id' => $user->id,

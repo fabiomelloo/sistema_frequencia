@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Enums\LancamentoStatus;
+use App\Enums\ProjecaoExportacaoStatus;
 use App\Models\Competencia;
 use App\Models\ExportacaoFolha;
 use App\Models\LancamentoSetorial;
+use App\Models\ProjecaoExportacaoFolha;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -22,15 +24,13 @@ class GeradorTxtFolhaService
 
     public function gerar(?string $competencia = null): array
     {
-        // Validação de negócio: competência deve existir. A exportação pode ocorrer após o fechamento.
-        if ($competencia) {
-            if (! Competencia::buscarPorReferencia($competencia)) {
-                throw new Exception("Competencia {$competencia} nao cadastrada no sistema.");
-            }
+        if ($competencia && ! Competencia::buscarPorReferencia($competencia)) {
+            throw new Exception("Competencia {$competencia} nao cadastrada no sistema.");
         }
 
         $query = LancamentoSetorial::where('status', LancamentoStatus::CONFERIDO->value)
             ->with(['evento', 'servidor'])
+            ->orderBy('id')
             ->lockForUpdate();
 
         if ($competencia) {
@@ -38,14 +38,43 @@ class GeradorTxtFolhaService
         }
 
         $lancamentos = $query->get();
+        $projecoes = ProjecaoExportacaoFolha::query()
+            ->where('status', ProjecaoExportacaoStatus::PRONTA)
+            ->whereNull('exportacao_id')
+            ->when(
+                $competencia,
+                fn ($query) => $query->whereHas(
+                    'competencia',
+                    fn ($competencias) => $competencias->where('referencia', $competencia)
+                )
+            )
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
 
-        if ($lancamentos->isEmpty()) {
+        if ($lancamentos->isEmpty() && $projecoes->isEmpty()) {
             throw new Exception('Nenhum lançamento conferido para exportação.'.
                 ($competencia ? " (competência: {$competencia})" : ''));
         }
 
-        // Validação de negócio: servidores inativos bloqueiam exportação
-        $servidoresInativos = $lancamentos->filter(fn ($l) => ! $l->servidor->ativo);
+        $chavesCandidatas = $lancamentos->map(fn (LancamentoSetorial $lancamento): array => [
+            'chave' => "{$lancamento->servidor_id}|{$lancamento->evento->codigo_evento}",
+            'descricao' => "{$lancamento->servidor->matricula}/{$lancamento->evento->codigo_evento}",
+        ])->concat($projecoes->map(fn (ProjecaoExportacaoFolha $projecao): array => [
+            'chave' => "{$projecao->servidor_id}|{$projecao->codigo_evento}",
+            'descricao' => "{$projecao->matricula}/{$projecao->codigo_evento}",
+        ]));
+        $conflitos = $chavesCandidatas->groupBy('chave')->filter(fn ($grupo) => $grupo->count() > 1);
+        if ($conflitos->isNotEmpty()) {
+            $itens = $conflitos->map(fn ($grupo): string => $grupo->first()['descricao'])->implode(', ');
+
+            throw new Exception(
+                "Existem itens duplicados entre a frequência nativa e os lançamentos legados: {$itens}. ".
+                'Mantenha uma única origem antes de exportar.'
+            );
+        }
+
+        $servidoresInativos = $lancamentos->filter(fn ($lancamento) => ! $lancamento->servidor->ativo);
         if ($servidoresInativos->isNotEmpty()) {
             $nomes = $servidoresInativos->pluck('servidor.nome')->unique()->implode(', ');
             throw new Exception(
@@ -55,38 +84,64 @@ class GeradorTxtFolhaService
 
         $conteudo = '';
         $idsExportados = collect();
+        $idsProjecoesExportadas = collect();
 
         foreach ($lancamentos as $lancamento) {
-            $this->validarDadosObrigatorios($lancamento);
+            $origem = "Lançamento #{$lancamento->id}";
+            $codigoEvento = $lancamento->evento->codigo_evento;
+            $matricula = $lancamento->servidor->matricula;
+            $this->validarDadosObrigatorios($codigoEvento, $matricula, $origem);
 
-            $linha = $this->formatarLinha($lancamento);
-            $this->validarTamanhoLinha($linha, $lancamento->id);
+            $linha = $this->formatarLinha($codigoEvento, $matricula, $lancamento->valor);
+            $this->validarTamanhoLinha($linha, $origem);
 
             $conteudo .= $linha.PHP_EOL;
             $idsExportados->push($lancamento->id);
         }
 
+        foreach ($projecoes as $projecao) {
+            $origem = "Item aprovado #{$projecao->folha_frequencia_item_id}";
+            $this->validarDadosObrigatorios($projecao->codigo_evento, $projecao->matricula, $origem);
+
+            $linha = $this->formatarLinha($projecao->codigo_evento, $projecao->matricula, $projecao->valor);
+            $this->validarTamanhoLinha($linha, $origem);
+
+            $conteudo .= $linha.PHP_EOL;
+            $idsProjecoesExportadas->push($projecao->id);
+        }
+
         $periodo = $competencia ? str_replace('-', '', $competencia) : now()->format('Ym');
         $nomeArquivo = $this->gerarNomeArquivo($competencia);
         $hashArquivo = hash('sha256', $conteudo);
-
         $caminhoArquivo = $this->salvarArquivo($nomeArquivo, $conteudo);
+        $quantidade = $lancamentos->count() + $projecoes->count();
 
         $exportacao = ExportacaoFolha::create([
             'periodo' => $periodo,
             'nome_arquivo' => $nomeArquivo,
             'hash_arquivo' => $hashArquivo,
             'usuario_id' => auth()->id(),
-            'quantidade_lancamentos' => $lancamentos->count(),
+            'quantidade_lancamentos' => $quantidade,
             'data_exportacao' => now(),
         ]);
 
         $exportacao->lancamentos()->attach($idsExportados->toArray());
+        LancamentoSetorial::query()->whereKey($idsExportados->toArray())->update([
+            'status' => LancamentoStatus::EXPORTADO->value,
+            'exportado_em' => now(),
+        ]);
+        ProjecaoExportacaoFolha::query()->whereKey($idsProjecoesExportadas->toArray())->update([
+            'status' => ProjecaoExportacaoStatus::EXPORTADA->value,
+            'exportacao_id' => $exportacao->id,
+            'exportado_em' => now(),
+        ]);
 
         Log::info('Exportação de folha realizada', [
             'exportacao_id' => $exportacao->id,
             'arquivo' => $nomeArquivo,
-            'quantidade' => $lancamentos->count(),
+            'quantidade' => $quantidade,
+            'quantidade_legada' => $lancamentos->count(),
+            'quantidade_nativa' => $projecoes->count(),
             'usuario_id' => auth()->id(),
             'hash' => $hashArquivo,
             'competencia' => $competencia,
@@ -96,52 +151,55 @@ class GeradorTxtFolhaService
             'nomeArquivo' => $nomeArquivo,
             'caminhoArquivo' => $caminhoArquivo,
             'idsExportados' => $idsExportados,
+            'idsProjecoesExportadas' => $idsProjecoesExportadas,
             'exportacaoId' => $exportacao->id,
-            'quantidade' => $lancamentos->count(),
+            'quantidade' => $quantidade,
+            'quantidadeLegada' => $lancamentos->count(),
+            'quantidadeNativa' => $projecoes->count(),
         ];
     }
 
-    private function validarDadosObrigatorios(LancamentoSetorial $lancamento): void
+    private function validarDadosObrigatorios(?string $codigoEvento, ?string $matricula, string $origem): void
     {
-        if (empty($lancamento->evento->codigo_evento)) {
-            throw new Exception("Lançamento #{$lancamento->id}: código do evento não informado.");
+        if (empty($codigoEvento)) {
+            throw new Exception("{$origem}: código do evento não informado.");
         }
 
-        if (empty($lancamento->servidor->matricula)) {
-            throw new Exception("Lançamento #{$lancamento->id}: matrícula do servidor não informada.");
+        if (empty($matricula)) {
+            throw new Exception("{$origem}: matrícula do servidor não informada.");
         }
 
-        if (strlen($lancamento->evento->codigo_evento) > self::TAMANHO_CODIGO_EVENTO) {
+        if (strlen($codigoEvento) > self::TAMANHO_CODIGO_EVENTO) {
             throw new Exception(
-                "Lançamento #{$lancamento->id}: código do evento excede tamanho máximo (".
+                "{$origem}: código do evento excede tamanho máximo (".
                 self::TAMANHO_CODIGO_EVENTO.' caracteres).'
             );
         }
 
-        if (strlen($lancamento->servidor->matricula) > self::TAMANHO_MATRICULA) {
+        if (strlen($matricula) > self::TAMANHO_MATRICULA) {
             throw new Exception(
-                "Lançamento #{$lancamento->id}: matrícula excede tamanho máximo (".
+                "{$origem}: matrícula excede tamanho máximo (".
                 self::TAMANHO_MATRICULA.' caracteres).'
             );
         }
     }
 
-    private function formatarLinha(LancamentoSetorial $lancamento): string
+    private function formatarLinha(string $codigoEvento, string $matricula, mixed $valorInformado): string
     {
-        $codigoEvento = str_pad($lancamento->evento->codigo_evento, self::TAMANHO_CODIGO_EVENTO, '0', STR_PAD_LEFT);
-        $matricula = str_pad($lancamento->servidor->matricula, self::TAMANHO_MATRICULA, '0', STR_PAD_LEFT);
+        $codigoEvento = str_pad($codigoEvento, self::TAMANHO_CODIGO_EVENTO, '0', STR_PAD_LEFT);
+        $matricula = str_pad($matricula, self::TAMANHO_MATRICULA, '0', STR_PAD_LEFT);
 
-        $valorCentavos = (int) round(($lancamento->valor ?? 0) * 100);
+        $valorCentavos = (int) round(($valorInformado ?? 0) * 100);
         $valor = str_pad($valorCentavos, self::TAMANHO_VALOR, '0', STR_PAD_LEFT);
 
         return $codigoEvento.$matricula.$valor;
     }
 
-    private function validarTamanhoLinha(string $linha, int $lancamentoId): void
+    private function validarTamanhoLinha(string $linha, string $origem): void
     {
         if (strlen($linha) !== self::TAMANHO_LINHA) {
             throw new Exception(
-                "Erro ao gerar linha do lançamento #{$lancamentoId}: ".
+                "Erro ao gerar linha de {$origem}: ".
                 'comprimento inválido ('.strlen($linha).' caracteres, esperado '.
                 self::TAMANHO_LINHA.').'
             );
