@@ -24,7 +24,10 @@ use InvalidArgumentException;
 
 class FolhaFrequenciaService
 {
-    public function __construct(private readonly FolhaFrequenciaItemService $itemService) {}
+    public function __construct(
+        private readonly FolhaFrequenciaItemService $itemService,
+        private readonly CoberturaFrequenciaService $coberturaService,
+    ) {}
 
     public function criar(Competencia $competencia, User $user): FolhaFrequencia
     {
@@ -121,6 +124,8 @@ class FolhaFrequenciaService
                 throw new InvalidArgumentException('Ainda existem servidores com frequência pendente.');
             }
 
+            $this->garantirPopulacaoIntegral($folha);
+
             foreach ($folha->servidores()->with('folha.competencia')->get() as $item) {
                 $possuiFalta = $this->possuiFalta($item);
                 if ($item->status === FrequenciaServidorStatus::COM_FALTAS && ! $possuiFalta) {
@@ -174,6 +179,7 @@ class FolhaFrequenciaService
                 throw new InvalidArgumentException('Apenas uma folha aguardando conferência pode ser aprovada.');
             }
 
+            $this->garantirPopulacaoIntegral($folha);
             $this->garantirConferenciaCompleta($folha);
             $folha->update([
                 'status' => FolhaFrequenciaStatus::APROVADA,
@@ -362,6 +368,22 @@ class FolhaFrequenciaService
         }
 
         $this->garantirEvidenciasDaFolha($folha, null, true);
+    }
+
+    private function garantirPopulacaoIntegral(FolhaFrequencia $folha): void
+    {
+        $divergencia = $this->coberturaService->divergenciaDaFolha($folha);
+
+        if (! $divergencia['populacao_integral']) {
+            $faltantes = count($divergencia['servidores_faltantes']);
+            $excedentes = count($divergencia['servidores_excedentes']);
+
+            throw new InvalidArgumentException(
+                'A folha está desatualizada em relação à população da competência: '
+                ."{$faltantes} servidor(es) faltante(s) e {$excedentes} excedente(s). "
+                .'Atualize a relação antes de continuar.'
+            );
+        }
     }
 
     private function garantirEvidenciasDaFolha(

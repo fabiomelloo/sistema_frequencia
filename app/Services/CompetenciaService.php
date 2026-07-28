@@ -109,6 +109,11 @@ class CompetenciaService
                 $cobertura['em_preenchimento'] > 0 ? "{$cobertura['em_preenchimento']} em preenchimento" : null,
                 $cobertura['aguardando'] > 0 ? "{$cobertura['aguardando']} aguardando conferência" : null,
                 $cobertura['devolvidas'] > 0 ? "{$cobertura['devolvidas']} devolvida(s)" : null,
+                $cobertura['divergencias_populacao'] > 0
+                    ? "{$cobertura['divergencias_populacao']} folha(s) com divergência populacional "
+                        ."({$cobertura['servidores_faltantes']} servidor(es) faltante(s), "
+                        ."{$cobertura['servidores_excedentes']} excedente(s))"
+                    : null,
             ]);
 
             $motivo = 'Pendências: '.implode(', ', $detalhes).'.';

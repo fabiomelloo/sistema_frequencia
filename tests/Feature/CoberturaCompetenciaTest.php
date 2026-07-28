@@ -7,6 +7,7 @@ use App\Enums\FolhaFrequenciaStatus;
 use App\Enums\UserRole;
 use App\Models\Competencia;
 use App\Models\FolhaFrequencia;
+use App\Models\LotacaoHistorico;
 use App\Models\Servidor;
 use App\Models\Setor;
 use App\Models\User;
@@ -64,6 +65,63 @@ class CoberturaCompetenciaTest extends TestCase
         $this->assertNotNull($competencia->fresh()->fechada_em);
     }
 
+    public function test_late_admission_missing_from_approved_sheet_blocks_closure(): void
+    {
+        [$competencia, $central, $setorA, $setorB] = $this->cenarioComDoisSetores();
+        $this->criarFolhaAprovada($competencia, $setorA, $central);
+        $this->criarFolhaAprovada($competencia, $setorB, $central);
+
+        Servidor::create([
+            'matricula' => 'COB-003',
+            'nome' => 'Servidor admitido depois',
+            'setor_id' => $setorA->id,
+            'data_admissao' => '2026-07-01',
+            'origem_registro' => 'MANUAL',
+            'ativo' => true,
+        ]);
+
+        $cobertura = app(CoberturaFrequenciaService::class)->porCompetencia($competencia);
+        $itemSetorA = $cobertura->first(fn (array $item): bool => $item['setor']->is($setorA));
+        $resumo = app(CoberturaFrequenciaService::class)->resumo($competencia, $cobertura);
+
+        $this->assertSame(2, $itemSetorA['servidores_esperados']);
+        $this->assertSame(1, $itemSetorA['servidores_na_folha']);
+        $this->assertCount(1, $itemSetorA['servidores_faltantes']);
+        $this->assertTrue($itemSetorA['bloqueia_fechamento']);
+        $this->assertSame(1, $resumo['divergencias_populacao']);
+        $this->assertFalse($resumo['pronta_para_fechar']);
+
+        $this->actingAs($central);
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('divergência populacional');
+
+        app(CompetenciaService::class)->fechar($competencia);
+    }
+
+    public function test_transfer_swap_is_detected_even_when_sector_counts_are_equal(): void
+    {
+        [$competencia, $central, $setorA, $setorB] = $this->cenarioComDoisSetores();
+        $this->criarFolhaAprovada($competencia, $setorA, $central);
+        $this->criarFolhaAprovada($competencia, $setorB, $central);
+        $servidorA = Servidor::firstWhere('setor_id', $setorA->id);
+        $servidorB = Servidor::firstWhere('setor_id', $setorB->id);
+
+        $this->registrarTransferenciaNoPeriodo($servidorA, $setorA, $setorB);
+        $this->registrarTransferenciaNoPeriodo($servidorB, $setorB, $setorA);
+
+        $cobertura = app(CoberturaFrequenciaService::class)->porCompetencia($competencia);
+
+        foreach ($cobertura as $item) {
+            $this->assertSame(1, $item['servidores_esperados']);
+            $this->assertSame(1, $item['servidores_na_folha']);
+            $this->assertCount(1, $item['servidores_faltantes']);
+            $this->assertCount(1, $item['servidores_excedentes']);
+            $this->assertTrue($item['bloqueia_fechamento']);
+        }
+
+        $this->assertFalse(app(CoberturaFrequenciaService::class)->resumo($competencia, $cobertura)['pronta_para_fechar']);
+    }
+
     /** @return array{Competencia, User, Setor, Setor} */
     private function cenarioComDoisSetores(): array
     {
@@ -97,7 +155,7 @@ class CoberturaCompetenciaTest extends TestCase
 
     private function criarFolhaAprovada(Competencia $competencia, Setor $setor, User $central): FolhaFrequencia
     {
-        return FolhaFrequencia::create([
+        $folha = FolhaFrequencia::create([
             'setor_id' => $setor->id,
             'competencia_id' => $competencia->id,
             'status' => FolhaFrequenciaStatus::APROVADA,
@@ -107,5 +165,33 @@ class CoberturaCompetenciaTest extends TestCase
             'conferido_por_id' => $central->id,
             'conferida_em' => now(),
         ]);
+
+        Servidor::all()
+            ->filter(fn (Servidor $servidor): bool => $servidor->estaAtivoNaCompetencia($competencia->referencia)
+                && $servidor->setorNaCompetencia($competencia->referencia) === $setor->id)
+            ->each(fn (Servidor $servidor) => $folha->servidores()->create([
+                'servidor_id' => $servidor->id,
+                'matricula' => $servidor->matricula,
+                'nome' => $servidor->nome,
+                'status' => 'INTEGRAL',
+            ]));
+
+        return $folha;
+    }
+
+    private function registrarTransferenciaNoPeriodo(Servidor $servidor, Setor $origem, Setor $destino): void
+    {
+        LotacaoHistorico::create([
+            'servidor_id' => $servidor->id,
+            'setor_id' => $origem->id,
+            'data_inicio' => '2026-06-11',
+            'data_fim' => '2026-06-30',
+        ]);
+        LotacaoHistorico::create([
+            'servidor_id' => $servidor->id,
+            'setor_id' => $destino->id,
+            'data_inicio' => '2026-07-01',
+        ]);
+        Servidor::withoutEvents(fn () => $servidor->update(['setor_id' => $destino->id]));
     }
 }
