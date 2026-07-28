@@ -14,6 +14,7 @@ class CoberturaFrequenciaService
     /**
      * @return Collection<int, array{
      *     setor: Setor,
+     *     setor_ativo: bool,
      *     servidores_esperados: int,
      *     servidores_na_folha: int,
      *     servidores_faltantes: array<int, int>,
@@ -29,8 +30,8 @@ class CoberturaFrequenciaService
      */
     public function porCompetencia(Competencia $competencia): Collection
     {
-        $setoresAtivos = Setor::where('ativo', true)->orderBy('nome')->get()->keyBy('id');
-        $servidoresPorSetor = $this->servidoresElegiveisPorSetor($competencia, $setoresAtivos);
+        $setores = Setor::orderBy('nome')->get()->keyBy('id');
+        $servidoresPorSetor = $this->servidoresElegiveisPorSetor($competencia);
         $folhas = FolhaFrequencia::where('competencia_id', $competencia->id)
             ->with(['finalizadoPor', 'conferidoPor', 'servidores'])
             ->withCount('servidores')
@@ -38,18 +39,21 @@ class CoberturaFrequenciaService
             ->keyBy('setor_id');
         $setoresComCobertura = $servidoresPorSetor->keys()
             ->merge($folhas->filter(fn (FolhaFrequencia $folha): bool => $folha->servidores_count > 0)->keys())
-            ->filter(fn (int $setorId): bool => $setoresAtivos->has($setorId))
+            ->filter(fn (int $setorId): bool => $setores->has($setorId))
             ->unique();
 
-        return $setoresComCobertura->map(function (int $setorId) use ($setoresAtivos, $servidoresPorSetor, $folhas): array {
+        return $setoresComCobertura->map(function (int $setorId) use ($setores, $servidoresPorSetor, $folhas): array {
             /** @var FolhaFrequencia|null $folha */
             $folha = $folhas->get($setorId);
+            $setor = $setores->get($setorId);
+            $setorAtivo = (bool) $setor->ativo;
             $esperados = $servidoresPorSetor->get($setorId, collect());
             $divergencia = $this->compararPopulacao($esperados, $folha);
 
             if (! $folha) {
                 return [
-                    'setor' => $setoresAtivos->get($setorId),
+                    'setor' => $setor,
+                    'setor_ativo' => $setorAtivo,
                     'servidores_esperados' => $esperados->count(),
                     'servidores_na_folha' => 0,
                     'servidores_faltantes' => $divergencia['servidores_faltantes'],
@@ -57,15 +61,16 @@ class CoberturaFrequenciaService
                     'populacao_integral' => false,
                     'divergencia_populacao' => false,
                     'folha' => null,
-                    'situacao' => 'NAO_INICIADA',
-                    'label' => 'Não iniciada',
-                    'cor' => 'secondary',
+                    'situacao' => $setorAtivo ? 'NAO_INICIADA' : 'SETOR_INATIVO',
+                    'label' => $setorAtivo ? 'Não iniciada' : 'Setor inativo',
+                    'cor' => $setorAtivo ? 'secondary' : 'danger',
                     'bloqueia_fechamento' => true,
                 ];
             }
 
             return [
-                'setor' => $setoresAtivos->get($setorId),
+                'setor' => $setor,
+                'setor_ativo' => $setorAtivo,
                 'servidores_esperados' => $esperados->count(),
                 'servidores_na_folha' => $divergencia['servidores_na_folha'],
                 'servidores_faltantes' => $divergencia['servidores_faltantes'],
@@ -73,10 +78,11 @@ class CoberturaFrequenciaService
                 'populacao_integral' => $divergencia['populacao_integral'],
                 'divergencia_populacao' => ! $divergencia['populacao_integral'],
                 'folha' => $folha,
-                'situacao' => $folha->status->value,
-                'label' => $folha->status->label(),
-                'cor' => $folha->status->cor(),
-                'bloqueia_fechamento' => $folha->status !== FolhaFrequenciaStatus::APROVADA
+                'situacao' => $setorAtivo ? $folha->status->value : 'SETOR_INATIVO',
+                'label' => $setorAtivo ? $folha->status->label() : 'Setor inativo',
+                'cor' => $setorAtivo ? $folha->status->cor() : 'danger',
+                'bloqueia_fechamento' => ! $setorAtivo
+                    || $folha->status !== FolhaFrequenciaStatus::APROVADA
                     || ! $divergencia['populacao_integral'],
             ];
         })->sortBy(fn (array $item): string => $item['setor']->nome)->values();
@@ -94,6 +100,7 @@ class CoberturaFrequenciaService
             'devolvidas' => $cobertura->where('situacao', FolhaFrequenciaStatus::DEVOLVIDA->value)->count(),
             'em_preenchimento' => $cobertura->where('situacao', FolhaFrequenciaStatus::RASCUNHO->value)->count(),
             'nao_iniciadas' => $cobertura->where('situacao', 'NAO_INICIADA')->count(),
+            'setores_inativos' => $cobertura->where('situacao', 'SETOR_INATIVO')->count(),
             'divergencias_populacao' => $cobertura->where('divergencia_populacao', true)->count(),
             'servidores_faltantes' => $cobertura->sum(fn (array $item): int => count($item['servidores_faltantes'])),
             'servidores_excedentes' => $cobertura->sum(fn (array $item): int => count($item['servidores_excedentes'])),
@@ -114,15 +121,18 @@ class CoberturaFrequenciaService
     public function divergenciaDaFolha(FolhaFrequencia $folha): array
     {
         $folha->loadMissing(['competencia', 'servidores']);
-        $setoresAtivos = Setor::where('ativo', true)->get()->keyBy('id');
-        $esperados = $this->servidoresElegiveisPorSetor($folha->competencia, $setoresAtivos)
+        $esperados = $this->servidoresElegiveisPorSetor($folha->competencia)
             ->get($folha->setor_id, collect());
 
-        return $this->compararPopulacao($esperados, $folha);
+        $divergencia = $this->compararPopulacao($esperados, $folha);
+        if (! (bool) $folha->setor()->value('ativo')) {
+            $divergencia['populacao_integral'] = false;
+        }
+
+        return $divergencia;
     }
 
-    /** @param Collection<int, Setor> $setoresAtivos */
-    private function servidoresElegiveisPorSetor(Competencia $competencia, Collection $setoresAtivos): Collection
+    private function servidoresElegiveisPorSetor(Competencia $competencia): Collection
     {
         $servidores = Servidor::query()
             ->where(fn ($query) => $query->where('ativo', true)
@@ -138,7 +148,6 @@ class CoberturaFrequenciaService
 
         return $servidores
             ->groupBy(fn (Servidor $servidor): int => $servidor->lotacoes->first()?->setor_id ?? $servidor->setor_id)
-            ->filter(fn (Collection $servidores, int $setorId): bool => $setoresAtivos->has($setorId))
             ->map(fn (Collection $servidores): Collection => $servidores
                 ->pluck('id')
                 ->map(fn (int $servidorId): int => $servidorId)

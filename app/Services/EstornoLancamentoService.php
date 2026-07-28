@@ -13,6 +13,7 @@ class EstornoLancamentoService
     {
         DB::transaction(function () use ($lancamento, $motivo): void {
             $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
+            $motivo = $this->validarMotivo($motivo);
 
             if (! $lancamento->isExportado()) {
                 throw new InvalidArgumentException('Apenas lançamentos EXPORTADOS podem ter estorno solicitado.');
@@ -21,14 +22,14 @@ class EstornoLancamentoService
             $antes = $lancamento->toArray();
             $lancamento->forceFill([
                 'status' => LancamentoStatus::ESTORNO_SOLICITADO,
-                'motivo_estorno' => trim($motivo),
+                'motivo_estorno' => $motivo,
             ])->save();
 
             AuditService::registrar(
                 'SOLICITOU_ESTORNO',
                 'LancamentoSetorial',
                 $lancamento->id,
-                'Solicitação de estorno registrada. Motivo: '.trim($motivo),
+                'Solicitação de estorno registrada. Motivo: '.$motivo,
                 $antes,
                 $lancamento->fresh()->toArray()
             );
@@ -44,10 +45,7 @@ class EstornoLancamentoService
                 throw new InvalidArgumentException('Apenas lançamentos com ESTORNO SOLICITADO podem ser estornados.');
             }
 
-            $motivo = trim($motivoInformado ?: $lancamento->motivo_estorno ?: '');
-            if ($motivo === '') {
-                throw new InvalidArgumentException('O motivo do estorno é obrigatório.');
-            }
+            $motivo = $this->validarMotivo($motivoInformado ?: $lancamento->motivo_estorno ?: '');
 
             $antes = $lancamento->toArray();
             $lancamento->forceFill([
@@ -77,6 +75,7 @@ class EstornoLancamentoService
     {
         DB::transaction(function () use ($lancamento, $motivo): void {
             $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
+            $motivo = $this->validarMotivo($motivo);
 
             if (! $lancamento->isEstornoSolicitado()) {
                 throw new InvalidArgumentException('Apenas solicitações de estorno pendentes podem ser recusadas.');
@@ -92,10 +91,20 @@ class EstornoLancamentoService
                 'RECUSOU_ESTORNO',
                 'LancamentoSetorial',
                 $lancamento->id,
-                'Solicitação de estorno recusada. Motivo: '.trim($motivo),
+                'Solicitação de estorno recusada. Motivo: '.$motivo,
                 $antes,
                 $lancamento->fresh()->toArray()
             );
         });
+    }
+
+    private function validarMotivo(string $motivo): string
+    {
+        $motivo = trim($motivo);
+        if (mb_strlen($motivo) < 10 || mb_strlen($motivo) > 1000) {
+            throw new InvalidArgumentException('O motivo deve ter entre 10 e 1000 caracteres.');
+        }
+
+        return $motivo;
     }
 }

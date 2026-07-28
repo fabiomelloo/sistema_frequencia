@@ -11,6 +11,7 @@ use App\Models\ProjecaoExportacaoFolha;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class GeradorTxtFolhaService
 {
@@ -116,47 +117,52 @@ class GeradorTxtFolhaService
         $caminhoArquivo = $this->salvarArquivo($nomeArquivo, $conteudo);
         $quantidade = $lancamentos->count() + $projecoes->count();
 
-        $exportacao = ExportacaoFolha::create([
-            'periodo' => $periodo,
-            'nome_arquivo' => $nomeArquivo,
-            'hash_arquivo' => $hashArquivo,
-            'usuario_id' => auth()->id(),
-            'quantidade_lancamentos' => $quantidade,
-            'data_exportacao' => now(),
-        ]);
+        try {
+            $exportacao = ExportacaoFolha::create([
+                'periodo' => $periodo,
+                'nome_arquivo' => $nomeArquivo,
+                'hash_arquivo' => $hashArquivo,
+                'usuario_id' => auth()->id(),
+                'quantidade_lancamentos' => $quantidade,
+                'data_exportacao' => now(),
+            ]);
 
-        $exportacao->lancamentos()->attach($idsExportados->toArray());
-        LancamentoSetorial::query()->whereKey($idsExportados->toArray())->update([
-            'status' => LancamentoStatus::EXPORTADO->value,
-            'exportado_em' => now(),
-        ]);
-        ProjecaoExportacaoFolha::query()->whereKey($idsProjecoesExportadas->toArray())->update([
-            'status' => ProjecaoExportacaoStatus::EXPORTADA->value,
-            'exportacao_id' => $exportacao->id,
-            'exportado_em' => now(),
-        ]);
+            $exportacao->lancamentos()->attach($idsExportados->toArray());
+            LancamentoSetorial::query()->whereKey($idsExportados->toArray())->update([
+                'status' => LancamentoStatus::EXPORTADO->value,
+                'exportado_em' => now(),
+            ]);
+            ProjecaoExportacaoFolha::query()->whereKey($idsProjecoesExportadas->toArray())->update([
+                'status' => ProjecaoExportacaoStatus::EXPORTADA->value,
+                'exportacao_id' => $exportacao->id,
+                'exportado_em' => now(),
+            ]);
 
-        Log::info('Exportação de folha realizada', [
-            'exportacao_id' => $exportacao->id,
-            'arquivo' => $nomeArquivo,
-            'quantidade' => $quantidade,
-            'quantidade_legada' => $lancamentos->count(),
-            'quantidade_nativa' => $projecoes->count(),
-            'usuario_id' => auth()->id(),
-            'hash' => $hashArquivo,
-            'competencia' => $competencia,
-        ]);
+            Log::info('Exportação de folha realizada', [
+                'exportacao_id' => $exportacao->id,
+                'arquivo' => $nomeArquivo,
+                'quantidade' => $quantidade,
+                'quantidade_legada' => $lancamentos->count(),
+                'quantidade_nativa' => $projecoes->count(),
+                'usuario_id' => auth()->id(),
+                'hash' => $hashArquivo,
+                'competencia' => $competencia,
+            ]);
 
-        return [
-            'nomeArquivo' => $nomeArquivo,
-            'caminhoArquivo' => $caminhoArquivo,
-            'idsExportados' => $idsExportados,
-            'idsProjecoesExportadas' => $idsProjecoesExportadas,
-            'exportacaoId' => $exportacao->id,
-            'quantidade' => $quantidade,
-            'quantidadeLegada' => $lancamentos->count(),
-            'quantidadeNativa' => $projecoes->count(),
-        ];
+            return [
+                'nomeArquivo' => $nomeArquivo,
+                'caminhoArquivo' => $caminhoArquivo,
+                'idsExportados' => $idsExportados,
+                'idsProjecoesExportadas' => $idsProjecoesExportadas,
+                'exportacaoId' => $exportacao->id,
+                'quantidade' => $quantidade,
+                'quantidadeLegada' => $lancamentos->count(),
+                'quantidadeNativa' => $projecoes->count(),
+            ];
+        } catch (Throwable $e) {
+            Storage::disk('local')->delete($caminhoArquivo);
+            throw $e;
+        }
     }
 
     private function validarDadosObrigatorios(?string $codigoEvento, ?string $matricula, string $origem): void

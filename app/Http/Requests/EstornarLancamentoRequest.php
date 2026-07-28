@@ -14,14 +14,13 @@ class EstornarLancamentoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'motivo_estorno' => ['required', 'string', 'min:10', 'max:1000'],
+            'motivo_estorno' => ['nullable', 'string', 'min:10', 'max:1000'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'motivo_estorno.required' => 'O motivo do estorno é obrigatório.',
             'motivo_estorno.string' => 'O motivo deve ser um texto válido.',
             'motivo_estorno.min' => 'O motivo deve ter pelo menos 10 caracteres.',
             'motivo_estorno.max' => 'O motivo não pode ter mais de 1000 caracteres.',

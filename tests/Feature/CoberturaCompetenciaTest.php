@@ -122,6 +122,24 @@ class CoberturaCompetenciaTest extends TestCase
         $this->assertFalse(app(CoberturaFrequenciaService::class)->resumo($competencia, $cobertura)['pronta_para_fechar']);
     }
 
+    public function test_inactive_sector_with_eligible_server_blocks_closure(): void
+    {
+        [$competencia, $central, $setorA, $setorB] = $this->cenarioComDoisSetores();
+        $this->criarFolhaAprovada($competencia, $setorA, $central);
+        $this->criarFolhaAprovada($competencia, $setorB, $central);
+        $setorB->update(['ativo' => false]);
+
+        $cobertura = app(CoberturaFrequenciaService::class)->porCompetencia($competencia);
+        $itemInativo = $cobertura->first(fn (array $item): bool => $item['setor']->is($setorB));
+        $resumo = app(CoberturaFrequenciaService::class)->resumo($competencia, $cobertura);
+
+        $this->assertSame('SETOR_INATIVO', $itemInativo['situacao']);
+        $this->assertFalse($itemInativo['setor_ativo']);
+        $this->assertTrue($itemInativo['bloqueia_fechamento']);
+        $this->assertSame(1, $resumo['setores_inativos']);
+        $this->assertFalse($resumo['pronta_para_fechar']);
+    }
+
     /** @return array{Competencia, User, Setor, Setor} */
     private function cenarioComDoisSetores(): array
     {

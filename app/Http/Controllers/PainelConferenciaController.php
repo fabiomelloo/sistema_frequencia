@@ -6,17 +6,15 @@ use App\Enums\LancamentoStatus;
 use App\Http\Requests\AprovarEmLoteRequest;
 use App\Http\Requests\EstornarLancamentoRequest;
 use App\Http\Requests\ExportarLancamentosRequest;
+use App\Http\Requests\RecusarEstornoRequest;
 use App\Http\Requests\RejeitarLancamentoRequest;
-use App\Models\Competencia;
 use App\Models\EventoFolha;
 use App\Models\LancamentoSetorial;
 use App\Models\Setor;
-use App\Services\AuditService;
-use App\Services\GeradorTxtFolhaService;
-use App\Services\NotificacaoService;
+use App\Services\ConferenciaLancamentoService;
+use App\Services\EstornoLancamentoService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -91,7 +89,7 @@ class PainelConferenciaController extends Controller
 
     public function aprovar(
         LancamentoSetorial $lancamento,
-        \App\Services\ConferenciaLancamentoService $service
+        ConferenciaLancamentoService $service
     ): RedirectResponse {
         try {
             $service->aprovar($lancamento, auth()->user());
@@ -105,7 +103,7 @@ class PainelConferenciaController extends Controller
     public function rejeitar(
         RejeitarLancamentoRequest $request,
         LancamentoSetorial $lancamento,
-        \App\Services\ConferenciaLancamentoService $service
+        ConferenciaLancamentoService $service
     ): RedirectResponse {
         try {
             $service->rejeitar(
@@ -122,7 +120,7 @@ class PainelConferenciaController extends Controller
 
     public function aprovarEmLote(
         AprovarEmLoteRequest $request,
-        \App\Services\ConferenciaLancamentoService $service
+        ConferenciaLancamentoService $service
     ): RedirectResponse {
         try {
             $resultado = $service->aprovarEmLote(
@@ -147,10 +145,10 @@ class PainelConferenciaController extends Controller
     public function estornar(
         EstornarLancamentoRequest $request,
         LancamentoSetorial $lancamento,
-        \App\Services\ConferenciaLancamentoService $service
+        EstornoLancamentoService $service
     ): RedirectResponse {
         try {
-            $service->estornar($lancamento, $request->validated('motivo_estorno'));
+            $service->aprovar($lancamento, $request->validated('motivo_estorno'));
         } catch (\InvalidArgumentException $e) {
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
@@ -158,9 +156,23 @@ class PainelConferenciaController extends Controller
         return redirect()->back()->with('success', 'Lançamento estornado! Setor notificado.');
     }
 
+    public function recusarEstorno(
+        RecusarEstornoRequest $request,
+        LancamentoSetorial $lancamento,
+        EstornoLancamentoService $service
+    ): RedirectResponse {
+        try {
+            $service->recusar($lancamento, $request->validated('motivo_recusa'));
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        }
+
+        return redirect()->back()->with('success', 'Solicitação de estorno recusada.');
+    }
+
     public function exportar(
         ExportarLancamentosRequest $request,
-        \App\Services\ConferenciaLancamentoService $service
+        ConferenciaLancamentoService $service
     ): StreamedResponse|RedirectResponse {
         try {
             $resultado = $service->exportar($request->validated('competencia'));

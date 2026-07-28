@@ -13,6 +13,7 @@ use App\Models\ProjecaoExportacaoFolha;
 use App\Models\User;
 use App\Support\SystemDefaults;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class CompetenciaService
 {
@@ -25,53 +26,60 @@ class CompetenciaService
      */
     public function abrir(string $referencia, ?string $dataLimite = null): Competencia
     {
-        $existente = Competencia::buscarPorReferencia($referencia);
+        return DB::transaction(function () use ($referencia, $dataLimite): Competencia {
+            $existente = Competencia::query()->where('referencia', $referencia)->lockForUpdate()->first();
 
-        if ($existente && $existente->estaAberta()) {
-            throw new \InvalidArgumentException("A competência {$referencia} já está aberta.");
-        }
-
-        if ($existente && $existente->estaFechada()) {
-            // Regra #13: alertar se existem lançamentos exportados
-            $exportados = LancamentoSetorial::where('competencia', $referencia)
-                ->where('status', LancamentoStatus::EXPORTADO->value)
-                ->count()
-                + ProjecaoExportacaoFolha::whereHas(
-                    'competencia',
-                    fn ($query) => $query->where('referencia', $referencia)
-                )->where('status', ProjecaoExportacaoStatus::EXPORTADA)->count();
-
-            if ($exportados > 0) {
-                throw new \InvalidArgumentException(
-                    "A competência {$referencia} possui {$exportados} lançamento(s) já exportado(s). ".
-                    'Reabrir pode causar inconsistências com a folha de pagamento. '.
-                    'Estorne os lançamentos exportados antes de reabrir.'
-                );
+            if ($existente && $existente->estaAberta()) {
+                throw new \InvalidArgumentException("A competência {$referencia} já está aberta.");
             }
 
-            $existente->status = CompetenciaStatus::ABERTA;
-            if (! $existente->data_inicio || ! $existente->data_fim) {
-                [$inicio, $fim] = Competencia::periodoPadrao($referencia);
-                $existente->data_inicio = $inicio;
-                $existente->data_fim = $fim;
+            if ($existente && $existente->estaFechada()) {
+                $impedimentos = LancamentoSetorial::where('competencia', $referencia)
+                    ->whereIn('status', [
+                        LancamentoStatus::EXPORTADO->value,
+                        LancamentoStatus::ESTORNO_SOLICITADO->value,
+                    ])
+                    ->selectRaw('status, COUNT(*) as total')
+                    ->groupBy('status')
+                    ->pluck('total', 'status');
+                $exportados = (int) ($impedimentos[LancamentoStatus::EXPORTADO->value] ?? 0);
+                $solicitados = (int) ($impedimentos[LancamentoStatus::ESTORNO_SOLICITADO->value] ?? 0);
+                $projecoesExportadas = ProjecaoExportacaoFolha::where('competencia_id', $existente->id)
+                    ->where('status', ProjecaoExportacaoStatus::EXPORTADA)
+                    ->count();
+
+                if ($exportados > 0 || $solicitados > 0 || $projecoesExportadas > 0) {
+                    throw new \InvalidArgumentException(
+                        "Não é possível reabrir a competência {$referencia}: existem {$exportados} lançamento(s) legado(s) exportado(s), "
+                        ."{$solicitados} solicitação(ões) de estorno pendente(s) e {$projecoesExportadas} item(ns) nativo(s) exportado(s). "
+                        .'Conclua os estornos e a reconciliação da exportação antes de reabrir.'
+                    );
+                }
+
+                $existente->status = CompetenciaStatus::ABERTA;
+                if (! $existente->data_inicio || ! $existente->data_fim) {
+                    [$inicio, $fim] = Competencia::periodoPadrao($referencia);
+                    $existente->data_inicio = $inicio;
+                    $existente->data_fim = $fim;
+                }
+                $existente->data_limite = $dataLimite;
+                $existente->aberta_por = Auth::id();
+                $existente->fechada_por = null;
+                $existente->fechada_em = null;
+                $existente->save();
+
+                return $existente;
             }
-            $existente->data_limite = $dataLimite;
-            $existente->aberta_por = Auth::id();
-            $existente->fechada_por = null;
-            $existente->fechada_em = null;
-            $existente->save();
 
-            return $existente;
-        }
-
-        return Competencia::create([
-            'referencia' => $referencia,
-            'status' => CompetenciaStatus::ABERTA,
-            'data_limite' => $dataLimite,
-            'aberta_por' => Auth::id(),
-            'fechada_por' => null,
-            'fechada_em' => null,
-        ]);
+            return Competencia::create([
+                'referencia' => $referencia,
+                'status' => CompetenciaStatus::ABERTA,
+                'data_limite' => $dataLimite,
+                'aberta_por' => Auth::id(),
+                'fechada_por' => null,
+                'fechada_em' => null,
+            ]);
+        });
     }
 
     /**
@@ -79,73 +87,75 @@ class CompetenciaService
      */
     public function fechar(Competencia $competencia): Competencia
     {
-        if ($competencia->estaFechada()) {
-            throw new \InvalidArgumentException("A competência {$competencia->referencia} já está fechada.");
-        }
+        return DB::transaction(function () use ($competencia): Competencia {
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($competencia->id);
 
-        $this->projecaoExportacaoService->projetarAprovadas($competencia);
+            if ($competencia->estaFechada()) {
+                throw new \InvalidArgumentException("A competência {$competencia->referencia} já está fechada.");
+            }
 
-        $pendentes = LancamentoSetorial::where('competencia', $competencia->referencia)
-            ->whereIn('status', [
-                LancamentoStatus::PENDENTE->value,
-                LancamentoStatus::CONFERIDO_SETORIAL->value,
-            ])
-            ->count();
+            $this->projecaoExportacaoService->projetarAprovadas($competencia);
 
-        if ($pendentes > 0) {
-            throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. ".
-                "Existem {$pendentes} lançamento(s) pendente(s) de conferência."
-            );
-        }
+            $pendentes = LancamentoSetorial::where('competencia', $competencia->referencia)
+                ->whereIn('status', [
+                    LancamentoStatus::PENDENTE->value,
+                    LancamentoStatus::CONFERIDO_SETORIAL->value,
+                ])
+                ->count();
 
-        $pendentesEstorno = LancamentoSetorial::where('competencia', $competencia->referencia)
-            ->whereIn('status', [
-                LancamentoStatus::ESTORNADO->value,
-                LancamentoStatus::ESTORNO_SOLICITADO->value,
-            ])
-            ->count();
+            if ($pendentes > 0) {
+                throw new \InvalidArgumentException(
+                    "Não é possível fechar a competência {$competencia->referencia}. ".
+                    "Existem {$pendentes} lançamento(s) pendente(s) de conferência."
+                );
+            }
 
-        if ($pendentesEstorno > 0) {
-            throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. ".
-                "Existem {$pendentesEstorno} lançamento(s) com estorno pendente (estornado ou com solicitação em aberto). ".
-                'Resolva os estornos antes de fechar.'
-            );
-        }
+            $estornosPendentes = LancamentoSetorial::where('competencia', $competencia->referencia)
+                ->where('status', LancamentoStatus::ESTORNO_SOLICITADO->value)
+                ->count();
 
-        $cobertura = app(CoberturaFrequenciaService::class)->resumo($competencia);
-        if (! $cobertura['pronta_para_fechar']) {
-            $detalhes = array_filter([
-                $cobertura['nao_iniciadas'] > 0 ? "{$cobertura['nao_iniciadas']} não iniciada(s)" : null,
-                $cobertura['em_preenchimento'] > 0 ? "{$cobertura['em_preenchimento']} em preenchimento" : null,
-                $cobertura['aguardando'] > 0 ? "{$cobertura['aguardando']} aguardando conferência" : null,
-                $cobertura['devolvidas'] > 0 ? "{$cobertura['devolvidas']} devolvida(s)" : null,
-                $cobertura['divergencias_populacao'] > 0
-                    ? "{$cobertura['divergencias_populacao']} folha(s) com divergência populacional "
-                        ."({$cobertura['servidores_faltantes']} servidor(es) faltante(s), "
-                        ."{$cobertura['servidores_excedentes']} excedente(s))"
-                    : null,
-            ]);
+            if ($estornosPendentes > 0) {
+                throw new \InvalidArgumentException(
+                    "Não é possível fechar a competência {$competencia->referencia}. ".
+                    "Existem {$estornosPendentes} solicitação(ões) de estorno pendente(s). ".
+                    'Conclua ou recuse as solicitações antes de fechar.'
+                );
+            }
 
-            $motivo = 'Pendências: '.implode(', ', $detalhes).'.';
+            $cobertura = app(CoberturaFrequenciaService::class)->resumo($competencia);
+            if (! $cobertura['pronta_para_fechar']) {
+                $detalhes = array_filter([
+                    $cobertura['nao_iniciadas'] > 0 ? "{$cobertura['nao_iniciadas']} não iniciada(s)" : null,
+                    $cobertura['em_preenchimento'] > 0 ? "{$cobertura['em_preenchimento']} em preenchimento" : null,
+                    $cobertura['aguardando'] > 0 ? "{$cobertura['aguardando']} aguardando conferência" : null,
+                    $cobertura['devolvidas'] > 0 ? "{$cobertura['devolvidas']} devolvida(s)" : null,
+                    ($cobertura['setores_inativos'] ?? 0) > 0 ? "{$cobertura['setores_inativos']} setor(es) inativo(s) com servidores elegíveis" : null,
+                    $cobertura['divergencias_populacao'] > 0
+                        ? "{$cobertura['divergencias_populacao']} folha(s) com divergência populacional "
+                            ."({$cobertura['servidores_faltantes']} servidor(es) faltante(s), "
+                            ."{$cobertura['servidores_excedentes']} excedente(s))"
+                        : null,
+                ]);
 
-            throw new \InvalidArgumentException(
-                "Não é possível fechar a competência {$competencia->referencia}. {$motivo} ".
-                'Todas as frequências mensais obrigatórias devem estar aprovadas.'
-            );
-        }
+                $motivo = 'Pendências: '.implode(', ', $detalhes).'.';
 
-        $competencia->status = CompetenciaStatus::FECHADA;
-        $emailSistema = Configuracao::get('email_usuario_sistema', 'admin@example.com');
-        $competencia->fechada_por = Auth::id()
-            ?? (User::firstWhere('email', $emailSistema)?->id
-                ?? User::where('role', UserRole::ADMIN)->first()?->id
-                ?? User::first()?->id);
-        $competencia->fechada_em = now();
-        $competencia->save();
+                throw new \InvalidArgumentException(
+                    "Não é possível fechar a competência {$competencia->referencia}. {$motivo} ".
+                    'Todas as frequências mensais obrigatórias devem estar aprovadas.'
+                );
+            }
 
-        return $competencia;
+            $competencia->status = CompetenciaStatus::FECHADA;
+            $emailSistema = Configuracao::get('email_usuario_sistema', 'admin@example.com');
+            $competencia->fechada_por = Auth::id()
+                ?? (User::firstWhere('email', $emailSistema)?->id
+                    ?? User::where('role', UserRole::ADMIN)->first()?->id
+                    ?? User::first()?->id);
+            $competencia->fechada_em = now();
+            $competencia->save();
+
+            return $competencia;
+        });
     }
 
     /**

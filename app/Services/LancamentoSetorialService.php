@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\LancamentoStatus;
 use App\Models\Competencia;
+use App\Models\Delegacao;
 use App\Models\EventoFolha;
 use App\Models\LancamentoSetorial;
 use App\Models\PrazoSetorial;
@@ -21,19 +22,32 @@ class LancamentoSetorialService
     {
         return $this->protectBusinessKey(
             fn (): LancamentoSetorial => DB::transaction(function () use ($dados, $usuario): LancamentoSetorial {
-                $servidor = Servidor::findOrFail($dados['servidor_id']);
-                $evento = EventoFolha::findOrFail($dados['evento_id']);
                 $competencia = $dados['competencia'];
+                $competenciaModel = Competencia::query()
+                    ->where('referencia', $competencia)
+                    ->lockForUpdate()
+                    ->first();
+                $servidor = Servidor::query()->lockForUpdate()->findOrFail($dados['servidor_id']);
+                $evento = EventoFolha::findOrFail($dados['evento_id']);
 
-                if (! Competencia::referenciaAberta($competencia)) {
+                if (! $competenciaModel || ! $competenciaModel->estaAberta()) {
                     throw new InvalidArgumentException("A competência {$competencia} está fechada para novos lançamentos.");
                 }
 
-                $this->regras->validar($servidor, $evento, $dados, null, $usuario->setor_id, $usuario);
+                $setorEfetivoId = $servidor->setorNaCompetencia($competencia);
+                if (! $setorEfetivoId) {
+                    throw new InvalidArgumentException('O servidor não possui setor válido nesta competência.');
+                }
+                if ($usuario->setor_id !== $setorEfetivoId
+                    && ! Delegacao::temDelegacaoAtiva($usuario->id, $setorEfetivoId)) {
+                    throw new InvalidArgumentException('Você não possui acesso ao setor efetivo do servidor nesta competência.');
+                }
+
+                $this->regras->validar($servidor, $evento, $dados, null, $setorEfetivoId, $usuario);
 
                 $lancamento = LancamentoSetorial::create([
                     ...$this->dadosPersistiveis($dados),
-                    'setor_origem_id' => $servidor->setorNaCompetencia($competencia),
+                    'setor_origem_id' => $setorEfetivoId,
                     'criado_por_id' => $usuario->id,
                     'status' => LancamentoStatus::PENDENTE,
                 ]);
@@ -55,18 +69,40 @@ class LancamentoSetorialService
     {
         return $this->protectBusinessKey(
             fn (): LancamentoSetorial => DB::transaction(function () use ($lancamento, $dados, $usuario): LancamentoSetorial {
+                $dados['competencia'] ??= $lancamento->competencia;
+                $competencia = Competencia::query()
+                    ->where('referencia', $dados['competencia'])
+                    ->lockForUpdate()
+                    ->first();
+                if (! $competencia || ! $competencia->estaAberta()) {
+                    throw new InvalidArgumentException("A competência {$dados['competencia']} está fechada para alterações.");
+                }
+                $servidores = Servidor::query()
+                    ->whereKey(array_values(array_unique([$lancamento->servidor_id, $dados['servidor_id']])))
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
                 $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
 
                 if ($lancamento->isRejeitado() && $lancamento->atingiuLimiteRejeicoes()) {
                     throw new InvalidArgumentException('Este lançamento atingiu o limite de rejeições e não pode mais ser re-submetido. Crie um novo lançamento.');
                 }
 
-                $servidor = Servidor::findOrFail($dados['servidor_id']);
+                $servidor = $servidores->get($dados['servidor_id']) ?? Servidor::findOrFail($dados['servidor_id']);
                 $evento = EventoFolha::findOrFail($dados['evento_id']);
-                $dados['competencia'] ??= $lancamento->competencia;
-                $antes = $lancamento->toArray();
+                $setorEfetivoId = $servidor->setorNaCompetencia($dados['competencia']);
 
-                $this->regras->validar($servidor, $evento, $dados, $lancamento->id, $usuario->setor_id, $usuario);
+                if (! $setorEfetivoId || $setorEfetivoId !== $lancamento->setor_origem_id) {
+                    throw new InvalidArgumentException('A atualização não pode alterar implicitamente o setor de origem do lançamento.');
+                }
+                if ($usuario->setor_id !== $setorEfetivoId
+                    && ! Delegacao::temDelegacaoAtiva($usuario->id, $setorEfetivoId)) {
+                    throw new InvalidArgumentException('Você não possui acesso ao setor efetivo deste lançamento.');
+                }
+
+                $antes = $lancamento->toArray();
+                $this->regras->validar($servidor, $evento, $dados, $lancamento->id, $setorEfetivoId, $usuario);
                 $lancamento->update($this->dadosPersistiveis($dados));
 
                 if ($lancamento->isRejeitado()) {
@@ -109,6 +145,8 @@ class LancamentoSetorialService
     {
         return $this->protectBusinessKey(
             fn (): LancamentoSetorial => DB::transaction(function () use ($id, $usuario): LancamentoSetorial {
+                $referencia = LancamentoSetorial::onlyTrashed()->whereKey($id)->value('competencia');
+                Competencia::query()->where('referencia', $referencia)->lockForUpdate()->firstOrFail();
                 $lancamento = LancamentoSetorial::onlyTrashed()->lockForUpdate()->findOrFail($id);
 
                 if ($lancamento->setor_origem_id !== $usuario->setor_id) {
@@ -138,6 +176,7 @@ class LancamentoSetorialService
     {
         $this->protectBusinessKey(
             fn () => DB::transaction(function () use ($lancamento, $usuario): void {
+                Competencia::query()->where('referencia', $lancamento->competencia)->lockForUpdate()->firstOrFail();
                 $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
 
                 if ($lancamento->setor_origem_id !== $usuario->setor_id) {
@@ -179,13 +218,25 @@ class LancamentoSetorialService
                 $aprovados = 0;
                 $ignoradosSegregacao = 0;
 
+                $referencias = LancamentoSetorial::query()
+                    ->whereKey($ids)
+                    ->distinct()
+                    ->orderBy('competencia')
+                    ->pluck('competencia');
+                Competencia::query()
+                    ->whereIn('referencia', $referencias)
+                    ->orderBy('referencia')
+                    ->lockForUpdate()
+                    ->get();
                 $lancamentos = LancamentoSetorial::query()->whereKey($ids)->lockForUpdate()->get()->keyBy('id');
 
                 foreach ($ids as $id) {
                     $lancamento = $lancamentos->get($id);
                     $statusValido = $lancamento && ($lancamento->isPendente() || $lancamento->isEstornado());
 
-                    if (! $statusValido || $lancamento->setor_origem_id !== $usuario->setor_id) {
+                    if (! $statusValido
+                        || ! Competencia::referenciaAberta($lancamento->competencia)
+                        || $lancamento->setor_origem_id !== $usuario->setor_id) {
                         continue;
                     }
 
@@ -217,21 +268,6 @@ class LancamentoSetorialService
             'LancamentoSetorial',
             $lancamento->id,
             "Lançamento cancelado pelo usuário: servidor_id={$lancamento->servidor_id}, evento_id={$lancamento->evento_id}"
-        );
-    }
-
-    public function solicitarEstorno(LancamentoSetorial $lancamento, string $motivo): void
-    {
-        $lancamento->forceFill([
-            'status' => LancamentoStatus::ESTORNO_SOLICITADO,
-            'motivo_estorno' => $motivo,
-        ])->save();
-
-        AuditService::registrar(
-            'SOLICITOU_ESTORNO',
-            'LancamentoSetorial',
-            $lancamento->id,
-            "Solicitação de Estorno registrada: servidor_id={$lancamento->servidor_id}. Motivo: {$motivo}"
         );
     }
 

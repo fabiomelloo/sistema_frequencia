@@ -7,16 +7,12 @@ use App\Http\Requests\AprovarSetorialEmLoteRequest;
 use App\Http\Requests\SolicitarEstornoRequest;
 use App\Http\Requests\StoreLancamentoSetorialRequest;
 use App\Http\Requests\UpdateLancamentoSetorialRequest;
-use App\Models\Competencia;
-use App\Models\EventoFolha;
 use App\Models\LancamentoSetorial;
-use App\Models\PrazoSetorial;
 use App\Models\Servidor;
-use App\Services\AuditService;
-use App\Services\RegrasLancamentoService;
+use App\Services\EstornoLancamentoService;
+use App\Services\LancamentoSetorialService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use InvalidArgumentException;
 
@@ -82,7 +78,7 @@ class LancamentoSetorialController extends Controller
 
     public function store(
         StoreLancamentoSetorialRequest $request,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         try {
             $service->criar($request->validated(), auth()->user());
@@ -141,7 +137,7 @@ class LancamentoSetorialController extends Controller
     public function update(
         UpdateLancamentoSetorialRequest $request,
         LancamentoSetorial $lancamento,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         try {
             $this->authorize('update', $lancamento);
@@ -160,7 +156,7 @@ class LancamentoSetorialController extends Controller
 
     public function destroy(
         LancamentoSetorial $lancamento,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         $this->authorize('delete', $lancamento);
         $service->excluir($lancamento);
@@ -187,7 +183,7 @@ class LancamentoSetorialController extends Controller
 
     public function restaurar(
         int $id,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         try {
             $service->restaurar($id, auth()->user());
@@ -204,7 +200,7 @@ class LancamentoSetorialController extends Controller
 
     public function aprovarSetorial(
         LancamentoSetorial $lancamento,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         $this->authorize('aprovarSetorial', $lancamento);
 
@@ -221,7 +217,7 @@ class LancamentoSetorialController extends Controller
 
     public function aprovarSetorialEmLote(
         AprovarSetorialEmLoteRequest $request,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         $resultado = $service->aprovarSetorialEmLote(
             $request->validated('lancamento_ids'),
@@ -238,7 +234,7 @@ class LancamentoSetorialController extends Controller
 
     public function cancelar(
         LancamentoSetorial $lancamento,
-        \App\Services\LancamentoSetorialService $service
+        LancamentoSetorialService $service
     ): RedirectResponse {
         $this->authorize('cancelar', $lancamento);
         $service->cancelar($lancamento);
@@ -251,10 +247,10 @@ class LancamentoSetorialController extends Controller
     public function solicitarEstorno(
         SolicitarEstornoRequest $request,
         LancamentoSetorial $lancamento,
-        \App\Services\LancamentoSetorialService $service
+        EstornoLancamentoService $service
     ): RedirectResponse {
         $this->authorize('solicitarEstorno', $lancamento);
-        $service->solicitarEstorno($lancamento, $request->validated('motivo_estorno'));
+        $service->solicitar($lancamento, $request->validated('motivo_estorno'));
 
         return redirect()
             ->back()

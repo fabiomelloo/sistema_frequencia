@@ -145,6 +145,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/{lancamento}/estornar', [PainelConferenciaController::class, 'estornar'])
                 ->whereNumber('lancamento')
                 ->name('estornar');
+            Route::post('/{lancamento}/recusar-estorno', [PainelConferenciaController::class, 'recusarEstorno'])
+                ->whereNumber('lancamento')
+                ->name('recusar-estorno');
         });
     });
 

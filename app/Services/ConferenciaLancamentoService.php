@@ -16,11 +16,13 @@ class ConferenciaLancamentoService
     public function __construct(
         private readonly GeradorTxtFolhaService $gerador,
         private readonly ProjecaoExportacaoFolhaService $projecaoExportacaoService,
+        private readonly EstornoLancamentoService $estornoLancamentoService,
     ) {}
 
     public function aprovar(LancamentoSetorial $lancamento, User $usuario): void
     {
         DB::transaction(function () use ($lancamento, $usuario): void {
+            Competencia::query()->where('referencia', $lancamento->competencia)->lockForUpdate()->firstOrFail();
             $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
             $this->validarCompetenciaAberta($lancamento, 'aprovar');
 
@@ -47,6 +49,7 @@ class ConferenciaLancamentoService
     public function rejeitar(LancamentoSetorial $lancamento, string $motivo, User $usuario): void
     {
         DB::transaction(function () use ($lancamento, $motivo, $usuario): void {
+            Competencia::query()->where('referencia', $lancamento->competencia)->lockForUpdate()->firstOrFail();
             $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
             $this->validarCompetenciaAberta($lancamento, 'rejeitar');
 
@@ -78,6 +81,16 @@ class ConferenciaLancamentoService
             $ignorados = 0;
             $competenciaFechada = 0;
 
+            $referencias = LancamentoSetorial::query()
+                ->whereKey($ids)
+                ->distinct()
+                ->orderBy('competencia')
+                ->pluck('competencia');
+            Competencia::query()
+                ->whereIn('referencia', $referencias)
+                ->orderBy('referencia')
+                ->lockForUpdate()
+                ->get();
             $lancamentos = LancamentoSetorial::query()
                 ->whereKey($ids)
                 ->with(['servidor', 'evento'])
@@ -121,38 +134,7 @@ class ConferenciaLancamentoService
 
     public function estornar(LancamentoSetorial $lancamento, ?string $motivoInformado): void
     {
-        DB::transaction(function () use ($lancamento, $motivoInformado): void {
-            $lancamento = LancamentoSetorial::query()->lockForUpdate()->findOrFail($lancamento->id);
-
-            if (! $lancamento->isExportado() && ! $lancamento->isEstornoSolicitado()) {
-                throw new InvalidArgumentException('Apenas lançamentos EXPORTADOS ou com ESTORNO SOLICITADO podem ser estornados.');
-            }
-
-            $this->validarCompetenciaAberta($lancamento, 'estornar');
-            $antes = $lancamento->toArray();
-            $motivo = $motivoInformado ?: $lancamento->motivo_estorno ?: $lancamento->motivo_rejeicao ?: '';
-
-            $lancamento->forceFill([
-                'status' => LancamentoStatus::ESTORNADO,
-                'motivo_estorno' => $motivo,
-                'exportado_em' => null,
-                'id_validador' => null,
-                'validated_at' => null,
-                'conferido_setorial_por' => null,
-                'conferido_setorial_em' => null,
-            ])->save();
-
-            $lancamento->load(['servidor', 'evento']);
-            AuditService::registrar(
-                'ESTORNOU',
-                'LancamentoSetorial',
-                $lancamento->id,
-                "Lançamento estornado — Motivo: {$motivo}",
-                $antes,
-                $lancamento->fresh()->toArray()
-            );
-            NotificacaoService::lancamentoEstornado($lancamento, $motivo);
-        });
+        $this->estornoLancamentoService->aprovar($lancamento, $motivoInformado);
     }
 
     public function exportar(string $competencia): array

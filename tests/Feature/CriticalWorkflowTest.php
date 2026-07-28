@@ -13,6 +13,7 @@ use App\Enums\TipoEvento;
 use App\Enums\TipoOcorrenciaFrequencia;
 use App\Enums\UserRole;
 use App\Models\Competencia;
+use App\Models\Delegacao;
 use App\Models\EventoFolha;
 use App\Models\FolhaFrequencia;
 use App\Models\Importacao;
@@ -23,6 +24,7 @@ use App\Models\Setor;
 use App\Models\User;
 use App\Services\ImportacaoOcorrenciaService;
 use App\Services\ImportacaoService;
+use App\Services\LancamentoSetorialService;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -90,6 +92,44 @@ class CriticalWorkflowTest extends TestCase
         $this->actingAs($usuario)
             ->get(route('lancamentos.edit', $lancamento))
             ->assertOk();
+    }
+
+    public function test_delegated_entry_uses_the_servers_effective_sector(): void
+    {
+        $setorDelegado = $this->criarSetor();
+        $setorUsuario = Setor::create([
+            'nome' => 'Setor do delegado',
+            'sigla' => 'DLG',
+            'ativo' => true,
+        ]);
+        $delegante = $this->criarUsuario($setorDelegado, UserRole::SETORIAL, 'delegante@example.test');
+        $delegado = $this->criarUsuario($setorUsuario, UserRole::SETORIAL, 'delegado@example.test');
+        $servidor = $this->criarServidor($setorDelegado);
+        $evento = $this->criarEvento();
+        $setorDelegado->eventosPermitidos()->attach($evento->id, ['ativo' => true]);
+        Competencia::create([
+            'referencia' => '2026-07',
+            'status' => CompetenciaStatus::ABERTA,
+            'aberta_por' => $delegante->id,
+        ]);
+        Delegacao::create([
+            'delegante_id' => $delegante->id,
+            'delegado_id' => $delegado->id,
+            'setor_id' => $setorDelegado->id,
+            'data_inicio' => now()->subDay(),
+            'data_fim' => now()->addDay(),
+            'ativa' => true,
+            'motivo' => 'Cobertura de férias',
+        ]);
+
+        $lancamento = app(LancamentoSetorialService::class)->criar([
+            'servidor_id' => $servidor->id,
+            'evento_id' => $evento->id,
+            'competencia' => '2026-07',
+        ], $delegado);
+
+        $this->assertSame($setorDelegado->id, $lancamento->setor_origem_id);
+        $this->assertSame($delegado->id, $lancamento->criado_por_id);
     }
 
     public function test_database_rejects_two_active_entries_for_the_same_business_key(): void

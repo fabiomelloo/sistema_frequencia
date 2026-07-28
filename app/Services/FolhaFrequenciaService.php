@@ -32,11 +32,12 @@ class FolhaFrequenciaService
 
     public function criar(Competencia $competencia, User $user): FolhaFrequencia
     {
-        if (! $competencia->estaAberta()) {
-            throw new InvalidArgumentException('A competência está fechada.');
-        }
-
         return DB::transaction(function () use ($competencia, $user): FolhaFrequencia {
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($competencia->id);
+            if (! $competencia->estaAberta()) {
+                throw new InvalidArgumentException('A competência está fechada.');
+            }
+
             $folha = FolhaFrequencia::firstOrCreate(
                 ['setor_id' => $user->setor_id, 'competencia_id' => $competencia->id],
                 ['status' => FolhaFrequenciaStatus::RASCUNHO, 'criado_por_id' => $user->id],
@@ -84,36 +85,43 @@ class FolhaFrequenciaService
 
     public function atualizarServidor(FolhaFrequenciaServidor $item, array $dados, User $user): FolhaFrequenciaServidor
     {
-        $folha = $item->folha;
-        if (! $folha->editavelPeloSetor() || ! $folha->competencia->estaAberta()) {
-            throw new InvalidArgumentException('A folha não está aberta para alterações.');
-        }
+        return DB::transaction(function () use ($item, $dados, $user): FolhaFrequenciaServidor {
+            $competenciaId = $item->folha()->value('competencia_id');
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($competenciaId);
+            $folha = FolhaFrequencia::query()->lockForUpdate()->findOrFail($item->folha_frequencia_id);
+            $item = FolhaFrequenciaServidor::query()->lockForUpdate()->findOrFail($item->id);
 
-        $status = FrequenciaServidorStatus::from($dados['status']);
-        $possuiFalta = $this->possuiFalta($item);
+            if (! $folha->editavelPeloSetor() || ! $competencia->estaAberta()) {
+                throw new InvalidArgumentException('A folha não está aberta para alterações.');
+            }
 
-        if ($status === FrequenciaServidorStatus::COM_FALTAS && ! $possuiFalta) {
-            throw new InvalidArgumentException('Registre ao menos uma ocorrência do tipo Falta antes de marcar COM FALTAS.');
-        }
-        if ($status === FrequenciaServidorStatus::INTEGRAL && $possuiFalta) {
-            throw new InvalidArgumentException('Este servidor possui falta registrada e não pode ser marcado com frequência integral.');
-        }
+            $status = FrequenciaServidorStatus::from($dados['status']);
+            $possuiFalta = $this->possuiFalta($item);
 
-        $item->update([
-            'status' => $status,
-            'observacao_geral' => $dados['observacao_geral'] ?? null,
-            'atualizado_por_id' => $user->id,
-            'preenchida_em' => $status === FrequenciaServidorStatus::PENDENTE ? null : now(),
-        ]);
+            if ($status === FrequenciaServidorStatus::COM_FALTAS && ! $possuiFalta) {
+                throw new InvalidArgumentException('Registre ao menos uma ocorrência do tipo Falta antes de marcar COM FALTAS.');
+            }
+            if ($status === FrequenciaServidorStatus::INTEGRAL && $possuiFalta) {
+                throw new InvalidArgumentException('Este servidor possui falta registrada e não pode ser marcado com frequência integral.');
+            }
 
-        return $item->refresh();
+            $item->update([
+                'status' => $status,
+                'observacao_geral' => $dados['observacao_geral'] ?? null,
+                'atualizado_por_id' => $user->id,
+                'preenchida_em' => $status === FrequenciaServidorStatus::PENDENTE ? null : now(),
+            ]);
+
+            return $item->refresh();
+        });
     }
 
     public function finalizar(FolhaFrequencia $folha, User $user): FolhaFrequencia
     {
         return DB::transaction(function () use ($folha, $user): FolhaFrequencia {
-            $folha = FolhaFrequencia::query()->with('competencia')->lockForUpdate()->findOrFail($folha->id);
-            if (! $folha->editavelPeloSetor() || ! $folha->competencia->estaAberta()) {
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($folha->competencia_id);
+            $folha = FolhaFrequencia::query()->lockForUpdate()->findOrFail($folha->id);
+            if (! $folha->editavelPeloSetor() || ! $competencia->estaAberta()) {
                 throw new InvalidArgumentException('A folha não está aberta para finalização.');
             }
 
@@ -155,27 +163,40 @@ class FolhaFrequenciaService
 
     public function reabrir(FolhaFrequencia $folha): FolhaFrequencia
     {
-        if (! $folha->estaFinalizada()) {
-            throw new InvalidArgumentException('Apenas uma folha aguardando conferência pode ser reaberta pelo setor.');
-        }
+        return DB::transaction(function () use ($folha): FolhaFrequencia {
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($folha->competencia_id);
+            $folha = FolhaFrequencia::query()->lockForUpdate()->findOrFail($folha->id);
 
-        if (! $folha->competencia->estaAberta()) {
-            throw new InvalidArgumentException('A competência está fechada e a folha não pode ser reaberta.');
-        }
+            if (! $folha->estaFinalizada()) {
+                throw new InvalidArgumentException('Apenas uma folha aguardando conferência pode ser reaberta pelo setor.');
+            }
 
-        $folha->update([
-            'status' => FolhaFrequenciaStatus::RASCUNHO,
-            'finalizado_por_id' => null,
-            'finalizada_em' => null,
-        ]);
+            if (! $competencia->estaAberta()) {
+                throw new InvalidArgumentException('A competência está fechada e a folha não pode ser reaberta.');
+            }
 
-        return $folha->refresh();
+            $folha->update([
+                'status' => FolhaFrequenciaStatus::RASCUNHO,
+                'finalizado_por_id' => null,
+                'finalizada_em' => null,
+                'conferido_por_id' => null,
+                'conferida_em' => null,
+                'motivo_devolucao' => null,
+            ]);
+
+            return $folha->refresh();
+        });
     }
 
     public function aprovar(FolhaFrequencia $folha, User $user): FolhaFrequencia
     {
         return DB::transaction(function () use ($folha, $user): FolhaFrequencia {
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($folha->competencia_id);
             $folha = FolhaFrequencia::query()->lockForUpdate()->findOrFail($folha->id);
+
+            if (! $competencia->estaAberta()) {
+                throw new InvalidArgumentException('A competência está fechada e a folha não pode ser aprovada.');
+            }
             if (! $folha->estaFinalizada()) {
                 throw new InvalidArgumentException('Apenas uma folha aguardando conferência pode ser aprovada.');
             }
@@ -197,11 +218,12 @@ class FolhaFrequenciaService
     public function devolver(FolhaFrequencia $folha, User $user, string $motivo): FolhaFrequencia
     {
         return DB::transaction(function () use ($folha, $user, $motivo): FolhaFrequencia {
-            $folha = FolhaFrequencia::query()->with('competencia')->lockForUpdate()->findOrFail($folha->id);
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($folha->competencia_id);
+            $folha = FolhaFrequencia::query()->lockForUpdate()->findOrFail($folha->id);
             if (! $folha->estaFinalizada()) {
                 throw new InvalidArgumentException('Apenas uma folha aguardando conferência pode ser devolvida.');
             }
-            if (! $folha->competencia->estaAberta()) {
+            if (! $competencia->estaAberta()) {
                 throw new InvalidArgumentException('A competência está fechada e a folha não pode ser devolvida para edição.');
             }
             if (! $this->possuiDivergencia($folha)) {
@@ -227,7 +249,11 @@ class FolhaFrequenciaService
         User $usuario,
     ): ConferenciaFrequenciaServidor {
         return DB::transaction(function () use ($folha, $item, $status, $apontamento, $usuario): ConferenciaFrequenciaServidor {
+            $competencia = Competencia::query()->lockForUpdate()->findOrFail($folha->competencia_id);
             $folha = FolhaFrequencia::query()->lockForUpdate()->findOrFail($folha->id);
+            if (! $competencia->estaAberta()) {
+                throw new InvalidArgumentException('A competência está fechada e não pode mais ser conferida.');
+            }
             if (! $folha->estaFinalizada()) {
                 throw new InvalidArgumentException('A conferência por servidor só pode ser realizada enquanto a folha aguarda análise da Central.');
             }

@@ -180,6 +180,21 @@ class FolhaNativaExportacaoTest extends TestCase
         $this->assertDatabaseCount('projecoes_exportacao_folha', 0);
     }
 
+    public function test_stale_sheet_instance_cannot_reopen_an_already_approved_sheet(): void
+    {
+        [$folha, , $central] = $this->cenarioNativo(UnidadeLancamento::MARCADOR, false, true);
+        $this->aprovarFolha($folha, $central);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Apenas uma folha aguardando conferência');
+
+        try {
+            app(FolhaFrequenciaService::class)->reabrir($folha);
+        } finally {
+            $this->assertSame(FolhaFrequenciaStatus::APROVADA, $folha->fresh()->status);
+        }
+    }
+
     public function test_closing_is_blocked_for_preexisting_approved_sheet_with_unprojectable_item(): void
     {
         [$folha, , , , , $setor, $competencia] = $this->cenarioNativo(

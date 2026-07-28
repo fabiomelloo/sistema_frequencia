@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\CompetenciaService;
 use App\Services\EstornoLancamentoService;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -48,6 +49,8 @@ class EstornoReaberturaCompetenciaTest extends TestCase
             $table->unsignedBigInteger('setor_id');
             $table->string('origem_registro');
             $table->boolean('ativo');
+            $table->date('data_admissao')->nullable();
+            $table->date('data_desligamento')->nullable();
             $table->timestamps();
         });
         Schema::create('eventos_folha', function (Blueprint $table): void {
@@ -65,6 +68,8 @@ class EstornoReaberturaCompetenciaTest extends TestCase
             $table->id();
             $table->string('referencia')->unique();
             $table->string('status');
+            $table->date('data_inicio');
+            $table->date('data_fim');
             $table->date('data_limite')->nullable();
             $table->unsignedBigInteger('aberta_por')->nullable();
             $table->unsignedBigInteger('fechada_por')->nullable();
@@ -90,6 +95,7 @@ class EstornoReaberturaCompetenciaTest extends TestCase
         });
         Schema::create('audit_logs', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->unique();
             $table->unsignedBigInteger('user_id')->nullable();
             $table->string('user_name')->nullable();
             $table->string('acao');
@@ -100,6 +106,38 @@ class EstornoReaberturaCompetenciaTest extends TestCase
             $table->json('dados_depois')->nullable();
             $table->string('ip')->nullable();
             $table->string('user_agent')->nullable();
+            $table->char('hash_anterior', 64)->nullable();
+            $table->char('hash_registro', 64)->unique();
+            $table->timestamps();
+        });
+        Schema::create('audit_chain_state', function (Blueprint $table): void {
+            $table->unsignedTinyInteger('id')->primary();
+            $table->char('ultimo_hash', 64)->nullable();
+            $table->timestamps();
+        });
+        DB::table('audit_chain_state')->insert([
+            'id' => 1,
+            'ultimo_hash' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        Schema::create('projecoes_exportacao_folha', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('competencia_id');
+            $table->string('status');
+            $table->timestamps();
+        });
+        Schema::create('folhas_frequencia', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('competencia_id');
+            $table->unsignedBigInteger('setor_id');
+            $table->string('status');
+            $table->timestamps();
+        });
+        Schema::create('folha_frequencia_servidores', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('folha_frequencia_id');
+            $table->unsignedBigInteger('servidor_id');
             $table->timestamps();
         });
         Schema::create('notificacoes', function (Blueprint $table): void {
@@ -110,6 +148,12 @@ class EstornoReaberturaCompetenciaTest extends TestCase
             $table->text('mensagem');
             $table->string('link')->nullable();
             $table->timestamp('lida_em')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('configuracoes', function (Blueprint $table): void {
+            $table->id();
+            $table->string('chave')->unique();
+            $table->text('valor')->nullable();
             $table->timestamps();
         });
     }
@@ -125,7 +169,7 @@ class EstornoReaberturaCompetenciaTest extends TestCase
             $competencias->abrir($competencia->referencia);
             $this->fail('A reabertura deveria ser bloqueada enquanto há lançamento exportado.');
         } catch (InvalidArgumentException $e) {
-            $this->assertStringContainsString('Solicite os estornos necessários', $e->getMessage());
+            $this->assertStringContainsString('Conclua os estornos', $e->getMessage());
         }
 
         $this->actingAs($setorial);
@@ -183,6 +227,10 @@ class EstornoReaberturaCompetenciaTest extends TestCase
         $this->actingAs($central);
         $estornos->aprovar($lancamento->fresh());
 
+        $lancamento->servidor->forceFill([
+            'ativo' => false,
+            'data_desligamento' => '2098-01-01',
+        ])->save();
         $competencia->forceFill(['status' => CompetenciaStatus::ABERTA])->save();
         app(CompetenciaService::class)->fechar($competencia->fresh());
 

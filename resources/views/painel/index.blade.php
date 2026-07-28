@@ -190,9 +190,12 @@
                                         </button>
                                     @endif
 
-                                    @if ($lancamento->isExportado() || $lancamento->isEstornoSolicitado())
+                                    @if ($lancamento->isEstornoSolicitado())
                                         <button type="button" class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#estornoModal{{ $lancamento->id }}" title="Estornar Exportação">
                                             <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#recusarEstornoModal{{ $lancamento->id }}" title="Recusar solicitação">
+                                            <i class="bi bi-x-circle"></i>
                                         </button>
                                     @endif
                                 </div>
@@ -243,7 +246,7 @@
         </div>
     @endif
 
-    @if ($lancamento->isExportado() || $lancamento->isEstornoSolicitado())
+    @if ($lancamento->isEstornoSolicitado())
         <div class="modal fade text-dark" id="estornoModal{{ $lancamento->id }}" tabindex="-1">
             <div class="modal-dialog">
                 <div class="modal-content">
@@ -264,12 +267,36 @@
                             @endif
                             <div class="mb-3">
                                 <label for="motivo_estorno{{ $lancamento->id }}" class="form-label fw-semibold">Motivo do Estorno</label>
-                                <textarea name="motivo_estorno" id="motivo_estorno{{ $lancamento->id }}" class="form-control" rows="3" placeholder="Descreva o motivo do estorno (opcional)..."></textarea>
+                                <textarea name="motivo_estorno" id="motivo_estorno{{ $lancamento->id }}" class="form-control" rows="3" placeholder="Mantenha ou complemente o motivo do estorno...">{{ $lancamento->motivo_estorno }}</textarea>
                             </div>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                             <button type="submit" class="btn btn-dark"><i class="bi bi-arrow-counterclockwise me-1"></i>Confirmar Estorno</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+    @if ($lancamento->isEstornoSolicitado())
+        <div class="modal fade text-dark" id="recusarEstornoModal{{ $lancamento->id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">Recusar solicitação de estorno</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ route('painel.recusar-estorno', $lancamento) }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <p><strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}</p>
+                            <label for="motivo_recusa{{ $lancamento->id }}" class="form-label fw-semibold">Motivo da recusa</label>
+                            <textarea name="motivo_recusa" id="motivo_recusa{{ $lancamento->id }}" class="form-control" rows="3" required minlength="10" maxlength="1000"></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger">Recusar solicitação</button>
                         </div>
                     </form>
                 </div>
