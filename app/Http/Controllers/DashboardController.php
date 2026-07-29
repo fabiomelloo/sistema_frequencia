@@ -7,20 +7,29 @@ use App\Models\EventoFolha;
 use App\Models\LancamentoSetorial;
 use App\Models\Servidor;
 use App\Models\Setor;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function index(): View
+    public function index(): View|RedirectResponse
     {
         $user = auth()->user();
 
-        if ($user->isCentral()) {
+        if ($user->isCentral() || $user->isAdmin()) {
             return $this->dashboardCentral();
         }
 
-        return $this->dashboardSetorial();
+        if ($user->isSetorial() || $user->isGestor()) {
+            return $this->dashboardSetorial();
+        }
+
+        if ($user->isAuditor()) {
+            return redirect()->route('admin.audit.index');
+        }
+
+        abort(403);
     }
 
     private function dashboardSetorial(): View

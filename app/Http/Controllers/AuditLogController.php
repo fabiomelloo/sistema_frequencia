@@ -40,11 +40,4 @@ class AuditLogController extends Controller
             'filtros' => $request->only(['acao', 'modelo', 'user_id', 'data_inicio', 'data_fim']),
         ]);
     }
-
-    public function show(AuditLog $auditLog): View
-    {
-        return view('admin.audit.show', [
-            'log' => $auditLog,
-        ]);
-    }
 }

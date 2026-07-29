@@ -25,6 +25,15 @@
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 @endif
+                @if($errors->any())
+                    <div class="alert alert-danger" role="alert">
+                        <ul class="mb-0">
+                            @foreach($errors->all() as $erro)
+                                <li>{{ $erro }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
 
                 <form action="{{ route('admin.configuracoes.update') }}" method="POST">
                     @csrf
@@ -43,13 +52,28 @@
                                 @forelse($configuracoes as $config)
                                     <tr>
                                         <td>
-                                            <code>{{ $config->chave }}</code>
+                                            <code>{{ $config['chave'] }}</code>
                                         </td>
                                         <td>
-                                            <span class="text-muted small">{{ $config->descricao ?? 'Sem descrição' }}</span>
+                                            <span class="text-muted small">{{ $config['descricao'] }}</span>
                                         </td>
                                         <td>
-                                            <input type="text" class="form-control" name="{{ $config->chave }}" value="{{ $config->valor }}">
+                                            @if($config['tipo'] === 'boolean')
+                                                <select class="form-select @error($config['chave']) is-invalid @enderror"
+                                                        name="{{ $config['chave'] }}">
+                                                    <option value="false" @selected(old($config['chave'], $config['valor']) === 'false')>Não</option>
+                                                    <option value="true" @selected(old($config['chave'], $config['valor']) === 'true')>Sim</option>
+                                                </select>
+                                            @else
+                                                <input type="{{ $config['tipo'] }}"
+                                                       class="form-control @error($config['chave']) is-invalid @enderror"
+                                                       name="{{ $config['chave'] }}"
+                                                       value="{{ old($config['chave'], $config['valor']) }}"
+                                                       @if($config['step']) step="{{ $config['step'] }}" @endif>
+                                            @endif
+                                            @error($config['chave'])
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
                                         </td>
                                     </tr>
                                 @empty
@@ -59,56 +83,6 @@
                                         </td>
                                     </tr>
                                 @endforelse
-                                <!-- Entradas de config extras que faltam no DB mas são esperadas no código -->
-                                @if(!$configuracoes->contains('chave', 'meses_retroativos'))
-                                    <tr>
-                                        <td><code>meses_retroativos</code></td>
-                                        <td><span class="text-muted small">Limite de meses para lançamentos retroativos (Padrão: 3)</span></td>
-                                        <td><input type="number" class="form-control" name="meses_retroativos" value="3"></td>
-                                    </tr>
-                                @endif
-                                @if(!$configuracoes->contains('chave', 'limite_orcamento_retroativo'))
-                                    <tr>
-                                        <td><code>limite_orcamento_retroativo</code></td>
-                                        <td><span class="text-muted small">Limite orçamentário total para lançamentos retroativos no mês atual</span></td>
-                                        <td><input type="number" step="0.01" class="form-control" name="limite_orcamento_retroativo" value=""></td>
-                                    </tr>
-                                @endif
-                                @if(!$configuracoes->contains('chave', 'limite_delegacoes_setor'))
-                                    <tr>
-                                        <td><code>limite_delegacoes_setor</code></td>
-                                        <td><span class="text-muted small">Máximo de delegações ativas por setor simultaneamente (Padrão: 3)</span></td>
-                                        <td><input type="number" class="form-control" name="limite_delegacoes_setor" value="3"></td>
-                                    </tr>
-                                @endif
-                                @if(!$configuracoes->contains('chave', 'duracao_maxima_delegacao_dias'))
-                                    <tr>
-                                        <td><code>duracao_maxima_delegacao_dias</code></td>
-                                        <td><span class="text-muted small">Duração máxima de uma delegação ativa em dias (Padrão: 90)</span></td>
-                                        <td><input type="number" class="form-control" name="duracao_maxima_delegacao_dias" value="90"></td>
-                                    </tr>
-                                @endif
-                                @if(!$configuracoes->contains('chave', 'maximo_dias_noturnos'))
-                                    <tr>
-                                        <td><code>maximo_dias_noturnos</code></td>
-                                        <td><span class="text-muted small">Máximo de dias de plantão noturno permitidos por mês (Padrão: 15)</span></td>
-                                        <td><input type="number" class="form-control" name="maximo_dias_noturnos" value="15"></td>
-                                    </tr>
-                                @endif
-                                @if(!$configuracoes->contains('chave', 'teto_adicional_noturno'))
-                                    <tr>
-                                        <td><code>teto_adicional_noturno</code></td>
-                                        <td><span class="text-muted small">Valor máximo financeiro permitido para o adicional noturno (Padrão: 500.00)</span></td>
-                                        <td><input type="number" step="0.01" class="form-control" name="teto_adicional_noturno" value="500.00"></td>
-                                    </tr>
-                                @endif
-                                @if(!$configuracoes->contains('chave', 'limite_valor_total_servidor'))
-                                    <tr>
-                                        <td><code>limite_valor_total_servidor</code></td>
-                                        <td><span class="text-muted small">Teto de valor total por servidor em um mês</span></td>
-                                        <td><input type="number" step="0.01" class="form-control" name="limite_valor_total_servidor" value=""></td>
-                                    </tr>
-                                @endif
                             </tbody>
                         </table>
                     </div>

@@ -4,51 +4,52 @@ namespace App\Services;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class UserService
 {
-    /**
-     * Cria um novo usuário com senha hashada.
-     */
     public function create(array $data): User
     {
-        // Garante que a senha seja hashada (embora o cast 'hashed' no Model já faça isso em Laravel 10+,
-        // é boa prática explicitar ou manipular aqui se houver lógica extra como envio de email)
+        return DB::transaction(function () use ($data): User {
+            $user = User::create($data);
+            AuditService::registrar(
+                'CRIOU',
+                'User',
+                $user->id,
+                'Conta de usuário criada.',
+                null,
+                $this->dadosAuditaveis($user)
+            );
 
-        // Log para auditoria (melhoria de segurança)
-        Log::info('Novo usuário criado', [
-            'email' => $data['email'],
-            'role' => $data['role'],
-            'criado_por' => auth()->id(),
-        ]);
-
-        return User::create($data);
+            return $user;
+        });
     }
 
-    /**
-     * Atualiza usuário, tratando lógica de senha vazia.
-     */
     public function update(User $user, array $data): bool
     {
-        // Lógica de senha vazia movida do Controller para cá
         if (empty($data['password'])) {
             unset($data['password']);
-        } else {
-            // Se senha fornecida, garante hash ou confia no cast do model
-            // $data['password'] = Hash::make($data['password']); // Opcional se usar cast
         }
 
-        $updated = $user->update($data);
+        return DB::transaction(function () use ($user, $data): bool {
+            $antes = $this->dadosAuditaveis($user);
+            $senhaAlterada = array_key_exists('password', $data);
+            $updated = $user->update($data);
 
-        Log::info('Usuário atualizado', [
-            'user_id' => $user->id,
-            'atualizado_por' => auth()->id(),
-        ]);
+            if ($updated) {
+                AuditService::registrar(
+                    'EDITOU',
+                    'User',
+                    $user->id,
+                    'Conta de usuário atualizada.',
+                    $antes,
+                    $this->dadosAuditaveis($user->fresh()) + ['senha_alterada' => $senhaAlterada]
+                );
+            }
 
-        return $updated;
+            return $updated;
+        });
     }
 
     public function desativar(User $user, User $responsavel): void
@@ -62,7 +63,7 @@ class UserService
         }
 
         DB::transaction(function () use ($user, $responsavel): void {
-            $antes = $user->toArray();
+            $antes = $this->dadosAuditaveis($user);
             $user->forceFill([
                 'ativo' => false,
                 'desativado_em' => now(),
@@ -70,20 +71,47 @@ class UserService
                 'remember_token' => Str::random(60),
             ])->save();
             DB::table('sessions')->where('user_id', $user->id)->delete();
-            AuditService::registrar('DESATIVOU', 'User', $user->id, 'Conta de usuário desativada.', $antes, $user->fresh()->toArray());
+            AuditService::registrar(
+                'DESATIVOU',
+                'User',
+                $user->id,
+                'Conta de usuário desativada.',
+                $antes,
+                $this->dadosAuditaveis($user->fresh())
+            );
         });
     }
 
     public function ativar(User $user): void
     {
-        $antes = $user->toArray();
-        $user->forceFill([
-            'ativo' => true,
-            'desativado_em' => null,
-            'desativado_por_id' => null,
-            'tentativas_login_falhas' => 0,
-            'bloqueado_ate' => null,
-        ])->save();
-        AuditService::registrar('REATIVOU', 'User', $user->id, 'Conta de usuário reativada.', $antes, $user->fresh()->toArray());
+        DB::transaction(function () use ($user): void {
+            $antes = $this->dadosAuditaveis($user);
+            $user->forceFill([
+                'ativo' => true,
+                'desativado_em' => null,
+                'desativado_por_id' => null,
+                'tentativas_login_falhas' => 0,
+                'bloqueado_ate' => null,
+            ])->save();
+            AuditService::registrar(
+                'REATIVOU',
+                'User',
+                $user->id,
+                'Conta de usuário reativada.',
+                $antes,
+                $this->dadosAuditaveis($user->fresh())
+            );
+        });
+    }
+
+    private function dadosAuditaveis(User $user): array
+    {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'setor_id' => $user->setor_id,
+            'role' => $user->role->value,
+            'ativo' => $user->ativo,
+        ];
     }
 }

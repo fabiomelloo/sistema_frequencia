@@ -14,7 +14,7 @@ class UsersController extends Controller
 {
     protected UserService $userService;
 
-    // Apenas CENTRAL pode gerenciar usuários
+    // CENTRAL consulta usuários; somente ADMIN pode alterar contas.
     public function __construct(UserService $userService)
     {
         $this->middleware('auth');
@@ -53,13 +53,6 @@ class UsersController extends Controller
         return redirect()
             ->route('admin.users.index')
             ->with('success', 'Usuário criado com sucesso!');
-    }
-
-    public function show(User $user): View
-    {
-        return view('admin.users.show', [
-            'user' => $user,
-        ]);
     }
 
     public function edit(User $user): View

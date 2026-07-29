@@ -21,7 +21,7 @@ class ServidorPolicy
     }
 
     /**
-     * Apenas CENTRAL pode criar/editar servidores.
+     * CENTRAL e ADMIN podem criar/editar servidores.
      */
     public function create(User $user): bool
     {
