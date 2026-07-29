@@ -1,5 +1,7 @@
 <?php
 
+use Illuminate\Support\Str;
+
 return [
     'default' => env('SESSION_DRIVER', 'file'),
 
@@ -21,14 +23,14 @@ return [
 
     'cookie' => env(
         'SESSION_COOKIE',
-        Illuminate\Support\Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
+        Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
     ),
 
     'path' => '/',
 
     'domain' => env('SESSION_DOMAIN'),
 
-    'secure' => env('SESSION_SECURE_COOKIES'),
+    'secure' => env('SESSION_SECURE_COOKIES', env('APP_ENV', 'production') === 'production'),
 
     'http_only' => true,
 

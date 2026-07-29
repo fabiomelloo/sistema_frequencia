@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ExportacaoFolha extends Model
 {
@@ -39,5 +40,10 @@ class ExportacaoFolha extends Model
             'exportacao_id',
             'lancamento_id'
         )->withTimestamps();
+    }
+
+    public function projecoesNativas(): HasMany
+    {
+        return $this->hasMany(ProjecaoExportacaoFolha::class, 'exportacao_id');
     }
 }

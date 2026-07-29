@@ -2,19 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\UserRole;
+use App\Http\Requests\StoreDelegacaoRequest;
+use App\Models\Configuracao;
 use App\Models\Delegacao;
 use App\Models\User;
 use App\Services\AuditService;
-use App\Http\Requests\StoreDelegacaoRequest;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
+use App\Support\SystemDefaults;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class DelegacaoController extends Controller
 {
     public function index(): View
     {
         $user = auth()->user();
+        $this->authorize('viewAny', Delegacao::class);
 
         $delegacoes = Delegacao::where('delegante_id', $user->id)
             ->orWhere('delegado_id', $user->id)
@@ -23,7 +27,7 @@ class DelegacaoController extends Controller
             ->paginate(10);
 
         // Usuários SETORIAIS disponíveis para receber delegação (exceto o próprio)
-        $usuarios = User::where('role', \App\Enums\UserRole::SETORIAL->value)
+        $usuarios = User::where('role', UserRole::SETORIAL->value)
             ->where('id', '!=', $user->id)
             ->orderBy('name')
             ->get();
@@ -36,6 +40,8 @@ class DelegacaoController extends Controller
 
     public function store(StoreDelegacaoRequest $request): RedirectResponse
     {
+        $this->authorize('create', Delegacao::class);
+
         $validated = $request->validated();
 
         $user = auth()->user();
@@ -44,11 +50,10 @@ class DelegacaoController extends Controller
         $delegado = User::findOrFail($delegadoId);
 
         // Validar que o delegado é SETORIAL
-        if (!$delegado->isSetorial()) {
+        if (! $delegado->isSetorial()) {
             return redirect()->back()->withErrors(['error' => 'Permissão negada: O delegado deve ter o perfil SETORIAL.']);
         }
 
-        // Segregação de Função: Prevenir delegação cruzada (A -> B e B -> A) simultaneamente
         $delegacaoCruzada = Delegacao::where('delegante_id', $delegadoId)
             ->where('delegado_id', $user->id)
             ->where('ativa', true)
@@ -69,7 +74,7 @@ class DelegacaoController extends Controller
         }
 
         // Limite de delegações ativas por setor
-        $limiteDelegacoes = (int) (\App\Models\Configuracao::get('limite_delegacoes_setor') ?? 3);
+        $limiteDelegacoes = (int) (Configuracao::get('limite_delegacoes_setor') ?? SystemDefaults::LIMITE_DELEGACOES_SETOR);
         $ativasNoSetor = Delegacao::where('setor_id', $user->setor_id)
             ->where('ativa', true)
             ->where('data_fim', '>=', now())
@@ -77,19 +82,19 @@ class DelegacaoController extends Controller
 
         if ($ativasNoSetor >= $limiteDelegacoes) {
             return redirect()->back()->withErrors([
-                'error' => "Limite de {$limiteDelegacoes} delegações ativas por setor atingido. Revogue uma delegação existente antes de criar outra."
+                'error' => "Limite de {$limiteDelegacoes} delegações ativas por setor atingido. Revogue uma delegação existente antes de criar outra.",
             ]);
         }
 
         // Limite de duração máxima (90 dias)
-        $duracaoMaxima = (int) (\App\Models\Configuracao::get('duracao_maxima_delegacao_dias') ?? 90);
-        $inicio = \Carbon\Carbon::parse($validated['data_inicio']);
-        $fim = \Carbon\Carbon::parse($validated['data_fim']);
+        $duracaoMaxima = (int) (Configuracao::get('duracao_maxima_delegacao_dias') ?? SystemDefaults::DURACAO_MAXIMA_DELEGACAO_DIAS);
+        $inicio = Carbon::parse($validated['data_inicio']);
+        $fim = Carbon::parse($validated['data_fim']);
         $duracaoDias = $inicio->diffInDays($fim);
 
         if ($duracaoDias > $duracaoMaxima) {
             return redirect()->back()->withErrors([
-                'error' => "A delegação não pode exceder {$duracaoMaxima} dias. Duração informada: {$duracaoDias} dias."
+                'error' => "A delegação não pode exceder {$duracaoMaxima} dias. Duração informada: {$duracaoDias} dias.",
             ]);
         }
 
@@ -115,16 +120,13 @@ class DelegacaoController extends Controller
     public function revogar(Delegacao $delegacao): RedirectResponse
     {
         $user = auth()->user();
-
-        if ($delegacao->delegante_id !== $user->id) {
-            abort(403, 'Apenas quem delegou pode revogar.');
-        }
+        $this->authorize('delete', $delegacao);
 
         $delegacao->ativa = false;
         $delegacao->save();
 
         AuditService::registrar('REVOGOU', 'Delegacao', $delegacao->id,
-            "Delegação revogada"
+            'Delegação revogada'
         );
 
         return redirect()

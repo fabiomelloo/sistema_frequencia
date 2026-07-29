@@ -2,13 +2,16 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Setor;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateSetorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->isCentral();
+        $setor = $this->route('setor');
+
+        return $setor && ($this->user()?->can('update', $setor) ?? false);
     }
 
     protected function prepareForValidation(): void
@@ -25,7 +28,29 @@ class UpdateSetorRequest extends FormRequest
 
         return [
             'nome' => ['required', 'string', 'max:255'],
-            'sigla' => ['required', 'string', 'max:10', 'unique:setores,sigla,' . $setorId],
+            'sigla' => ['required', 'string', 'max:10', 'unique:setores,sigla,'.$setorId],
+            'codigo_externo' => ['nullable', 'string', 'max:50'],
+            'setor_pai_id' => [
+                'nullable',
+                'integer',
+                'exists:setores,id',
+                function (string $attribute, mixed $value, \Closure $fail) use ($setorId): void {
+                    if (! $value) {
+                        return;
+                    }
+
+                    if ((int) $value === $setorId) {
+                        $fail('Um setor não pode ser subordinado a ele mesmo.');
+
+                        return;
+                    }
+
+                    $pai = Setor::find($value);
+                    if ($pai?->possuiAncestral($setorId)) {
+                        $fail('A hierarquia informada criaria um ciclo entre setores.');
+                    }
+                },
+            ],
             'ativo' => ['required', 'boolean'],
         ];
     }

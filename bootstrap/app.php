@@ -1,8 +1,14 @@
 <?php
 
+use App\Http\Middleware\AuditReadMiddleware;
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\ShareNotificacoes;
+use App\Providers\AppServiceProvider;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -11,30 +17,34 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withProviders([
+        AppServiceProvider::class,
+    ])
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
-            'role' => \App\Http\Middleware\CheckRole::class,
+            'role' => CheckRole::class,
         ]);
-        
+
         $middleware->redirectGuestsTo(fn () => route('login'));
 
         // Middleware global: security headers + notificações compartilhadas + auditoria de leitura
         $middleware->web(append: [
-            \App\Http\Middleware\SecurityHeaders::class,
-            \App\Http\Middleware\ShareNotificacoes::class,
-            \App\Http\Middleware\AuditReadMiddleware::class,
+            SecurityHeaders::class,
+            ShareNotificacoes::class,
+            AuditReadMiddleware::class,
         ]);
 
         // Rate limiting para rotas API
         $middleware->api(prepend: [
-            \Illuminate\Routing\Middleware\ThrottleRequests::class . ':api',
+            ThrottleRequests::class.':api',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->shouldRenderJsonWhen(function ($request, \Throwable $e) {
+        $exceptions->shouldRenderJsonWhen(function ($request, Throwable $e) {
             if ($request->is('api/*')) {
                 return true;
             }
+
             return $request->expectsJson();
         });
     })->create();

@@ -33,6 +33,31 @@
                     @enderror
                 </div>
 
+                <div class="mb-3">
+                    <label for="codigo_externo" class="form-label">Código externo</label>
+                    <input type="text" class="form-control @error('codigo_externo') is-invalid @enderror"
+                           id="codigo_externo" name="codigo_externo" value="{{ old('codigo_externo') }}" maxlength="50">
+                    <div class="form-text">Código usado no documento de origem, por exemplo 001.303 ou 403.</div>
+                    @error('codigo_externo')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+
+                <div class="mb-3">
+                    <label for="setor_pai_id" class="form-label">Unidade ou setor superior</label>
+                    <select class="form-select @error('setor_pai_id') is-invalid @enderror" id="setor_pai_id" name="setor_pai_id">
+                        <option value="">Nenhum — nível principal</option>
+                        @foreach ($setoresPai as $setorPai)
+                            <option value="{{ $setorPai->id }}" @selected(old('setor_pai_id') == $setorPai->id)>
+                                {{ $setorPai->nome }} ({{ $setorPai->sigla }})
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('setor_pai_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+
                 <div class="mb-3 form-check">
                     <input type="checkbox" class="form-check-input" id="ativo" name="ativo" {{ old('ativo') ? 'checked' : '' }}>
                     <label class="form-check-label" for="ativo">Ativo</label>

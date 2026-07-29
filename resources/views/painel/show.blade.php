@@ -1,5 +1,8 @@
 @extends('layouts.app')
 
+@section('title', 'Conferência de Lançamento — Sistema de Frequência')
+@section('description', 'Painel de conferência central: detalhes e ações de aprovação/rejeição do lançamento.')
+
 @section('content')
 <div class="container">
     <div class="row mb-4">
@@ -17,15 +20,9 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         Informações do Lançamento
-                        @if ($lancamento->isPendente())
-                            <span class="badge bg-danger float-end">PENDENTE</span>
-                        @elseif ($lancamento->isConferido())
-                            <span class="badge bg-success float-end">CONFERIDO</span>
-                        @elseif ($lancamento->isRejeitado())
-                            <span class="badge bg-warning float-end">REJEITADO</span>
-                        @elseif ($lancamento->isExportado())
-                            <span class="badge bg-secondary float-end">EXPORTADO</span>
-                        @endif
+                        <span class="badge float-end" style="background-color: {{ $lancamento->status->cor() }}">
+                            {{ $lancamento->status->label() }}
+                        </span>
                     </h5>
                 </div>
                 <div class="card-body">
@@ -51,30 +48,80 @@
                         </div>
                     </div>
 
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Competência:</strong><br>
+                            {{ $lancamento->competencia }}
+                        </div>
+                    </div>
+
+                    {{-- Campos de dias --}}
                     @if ($lancamento->dias_trabalhados)
                         <div class="row mb-3">
                             <div class="col-md-6">
                                 <strong>Dias Trabalhados:</strong><br>
                                 {{ $lancamento->dias_trabalhados }}
                             </div>
+                            @if ($lancamento->dias_noturnos)
+                                <div class="col-md-6">
+                                    <strong>Dias Noturnos:</strong><br>
+                                    {{ $lancamento->dias_noturnos }}
+                                </div>
+                            @endif
                         </div>
                     @endif
 
-                    @if ($lancamento->valor)
+                    {{-- Campos de valor --}}
+                    @if ($lancamento->valor || $lancamento->valor_gratificacao)
                         <div class="row mb-3">
-                            <div class="col-md-6">
-                                <strong>Valor:</strong><br>
-                                R$ {{ number_format($lancamento->valor, 2, ',', '.') }}
-                            </div>
+                            @if ($lancamento->valor)
+                                <div class="col-md-6">
+                                    <strong>Valor:</strong><br>
+                                    R$ {{ number_format($lancamento->valor, 2, ',', '.') }}
+                                </div>
+                            @endif
+                            @if ($lancamento->valor_gratificacao)
+                                <div class="col-md-6">
+                                    <strong>Gratificação:</strong><br>
+                                    R$ {{ number_format($lancamento->valor_gratificacao, 2, ',', '.') }}
+                                </div>
+                            @endif
                         </div>
                     @endif
 
-                    @if ($lancamento->porcentagem_insalubridade)
+                    {{-- Percentuais --}}
+                    @if ($lancamento->porcentagem_insalubridade || $lancamento->porcentagem_periculosidade)
                         <div class="row mb-3">
-                            <div class="col-md-6">
-                                <strong>Porcentagem de Insalubridade:</strong><br>
-                                {{ $lancamento->porcentagem_insalubridade }}%
-                            </div>
+                            @if ($lancamento->porcentagem_insalubridade)
+                                <div class="col-md-6">
+                                    <strong>Insalubridade:</strong><br>
+                                    {{ $lancamento->porcentagem_insalubridade }}%
+                                </div>
+                            @endif
+                            @if ($lancamento->porcentagem_periculosidade)
+                                <div class="col-md-6">
+                                    <strong>Periculosidade:</strong><br>
+                                    {{ $lancamento->porcentagem_periculosidade }}%
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- Adicionais --}}
+                    @if ($lancamento->adicional_turno || $lancamento->adicional_noturno)
+                        <div class="row mb-3">
+                            @if ($lancamento->adicional_turno)
+                                <div class="col-md-6">
+                                    <strong>Adicional de Turno:</strong><br>
+                                    R$ {{ number_format($lancamento->adicional_turno, 2, ',', '.') }}
+                                </div>
+                            @endif
+                            @if ($lancamento->adicional_noturno)
+                                <div class="col-md-6">
+                                    <strong>Adicional Noturno:</strong><br>
+                                    R$ {{ number_format($lancamento->adicional_noturno, 2, ',', '.') }}
+                                </div>
+                            @endif
                         </div>
                     @endif
 
@@ -96,15 +143,29 @@
                         </div>
                     </div>
 
+                    {{-- Conferência Setorial --}}
+                    @if ($lancamento->conferido_setorial_em)
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <strong>Conferido pelo Setor em:</strong><br>
+                                {{ $lancamento->conferido_setorial_em->format('d/m/Y H:i:s') }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Conferido por:</strong><br>
+                                {{ $lancamento->conferidoSetorialPor?->name ?? 'N/A' }}
+                            </div>
+                        </div>
+                    @endif
+
                     @if ($lancamento->validated_at)
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <strong>Data de Validação:</strong><br>
+                                <strong>Data de Validação (Central):</strong><br>
                                 {{ $lancamento->validated_at->format('d/m/Y H:i:s') }}
                             </div>
                             <div class="col-md-6">
                                 <strong>Validado por:</strong><br>
-                                {{ $lancamento->validador->name }}
+                                {{ $lancamento->validador?->name ?? 'N/A' }}
                             </div>
                         </div>
                     @endif
@@ -125,6 +186,17 @@
                             <div class="col-md-6">
                                 <strong>Exportado em:</strong><br>
                                 {{ $lancamento->exportado_em->format('d/m/Y H:i:s') }}
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($lancamento->motivo_estorno)
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <strong>Motivo do Estorno:</strong><br>
+                                <div class="alert alert-secondary mb-0">
+                                    {{ $lancamento->motivo_estorno }}
+                                </div>
                             </div>
                         </div>
                     @endif

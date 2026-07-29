@@ -20,10 +20,21 @@ class Configuracao extends Model
      */
     public static function get(string $chave, $default = null): ?string
     {
-        return Cache::remember('configuracao_'.$chave, now()->addDays(7), function () use ($chave, $default) {
-            $config = self::where('chave', $chave)->first();
-            return $config ? $config->valor : $default;
-        });
+        $cacheKey = 'configuracao_'.$chave;
+
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        $config = self::where('chave', $chave)->first();
+
+        if ($config) {
+            Cache::put($cacheKey, $config->valor, now()->addDays(7));
+
+            return $config->valor;
+        }
+
+        return $default;
     }
 
     /**
@@ -32,7 +43,7 @@ class Configuracao extends Model
     public static function set(string $chave, string $valor, ?string $descricao = null): self
     {
         Cache::forget('configuracao_'.$chave);
-        
+
         return self::updateOrCreate(
             ['chave' => $chave],
             array_filter([
@@ -45,11 +56,11 @@ class Configuracao extends Model
     protected static function booted()
     {
         static::saved(function ($configuracao) {
-            Cache::forget('configuracao_' . $configuracao->chave);
+            Cache::forget('configuracao_'.$configuracao->chave);
         });
 
         static::deleted(function ($configuracao) {
-            Cache::forget('configuracao_' . $configuracao->chave);
+            Cache::forget('configuracao_'.$configuracao->chave);
         });
     }
 

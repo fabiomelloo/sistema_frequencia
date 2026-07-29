@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 class AuditLog extends Model
 {
     protected $table = 'audit_logs';
 
     protected $fillable = [
+        'uuid',
         'user_id',
         'user_name',
         'acao',
@@ -20,6 +22,10 @@ class AuditLog extends Model
         'dados_depois',
         'ip',
         'user_agent',
+        'hash_anterior',
+        'created_at',
+        'hash_registro',
+        'updated_at',
     ];
 
     protected $casts = [
@@ -31,6 +37,16 @@ class AuditLog extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(function (): never {
+            throw new LogicException('Registros de auditoria sao imutaveis.');
+        });
+        static::deleting(function (): never {
+            throw new LogicException('Registros de auditoria nao podem ser excluidos.');
+        });
     }
 
     // Scopes para filtragem

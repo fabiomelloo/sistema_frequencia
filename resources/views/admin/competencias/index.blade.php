@@ -39,7 +39,7 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="bg-light">
                     <tr>
-                        <th class="ps-4">Competência</th>
+                        <th class="ps-4">Competência / período</th>
                         <th>Status</th>
                         <th>Dias Úteis</th>
                         <th>Data Limite</th>
@@ -59,16 +59,19 @@
                                 @endif
                             </td>
                             <td>{{ \App\Models\Competencia::obterDiasUteis($competencia->referencia) }} dias</td>
-                            <td>{{ $competencia->data_limite->format('d/m/Y') }}</td>
+                            <td>{{ $competencia->data_limite?->format('d/m/Y') ?? '—' }}</td>
                             <td>
                                 <div class="d-flex align-items-center">
                                     <div class="avatar-circle bg-primary text-white me-2 rounded-circle d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; font-size: 0.7rem;">
-                                        {{ substr($competencia->criadoPor->name, 0, 1) }}
+                                        {{ mb_substr($competencia->criadoPor?->name ?? 'S', 0, 1) }}
                                     </div>
-                                    <small>{{ $competencia->criadoPor->name }}</small>
+                                    <small>{{ $competencia->criadoPor?->name ?? 'Sistema' }}</small>
                                 </div>
                             </td>
                             <td class="text-end pe-4">
+                                <a href="{{ route('admin.competencias.cobertura', $competencia) }}" class="btn btn-sm btn-outline-primary me-1">
+                                    <i class="bi bi-diagram-3 me-1"></i> Cobertura
+                                </a>
                                 @if($competencia->status === \App\Enums\CompetenciaStatus::ABERTA)
                                     <form action="{{ route('admin.competencias.fechar', $competencia->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja fechar esta competência? Novos lançamentos serão bloqueados.');">
                                         @csrf
@@ -120,7 +123,7 @@
                         <label for="competencia" class="form-label">Mês/Ano (MM/AAAA)</label>
                         <input type="month" class="form-control" id="referencia" name="referencia" required 
                                value="{{ now()->addMonth()->format('Y-m') }}">
-                        <div class="form-text">Selecione o mês e ano da competência.</div>
+                        <div class="form-text">A referência selecionada representa, por padrão, o período do dia 11 do mês anterior ao dia 10 deste mês.</div>
                     </div>
                     <div class="mb-3">
                         <label for="data_limite" class="form-label">Data Limite para Lançamentos</label>

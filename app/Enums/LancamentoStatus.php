@@ -15,7 +15,7 @@ enum LancamentoStatus: string
 
     public function label(): string
     {
-        return match($this) {
+        return match ($this) {
             self::PENDENTE => 'Pendente',
             self::CONFERIDO_SETORIAL => 'Conferido (Setorial)',
             self::CONFERIDO => 'Conferido (Central)',
@@ -29,15 +29,15 @@ enum LancamentoStatus: string
 
     public function cor(): string
     {
-        return match($this) {
-            self::PENDENTE => 'warning',
-            self::CONFERIDO_SETORIAL => 'info',
-            self::CONFERIDO => 'success',
-            self::REJEITADO => 'danger',
-            self::EXPORTADO => 'secondary',
-            self::ESTORNADO => 'dark',
-            self::CANCELADO => 'danger',
-            self::ESTORNO_SOLICITADO => 'warning',
+        return match ($this) {
+            self::PENDENTE => '#f59e0b',   // amber / warning
+            self::CONFERIDO_SETORIAL => '#0ea5e9',   // sky-blue / info
+            self::CONFERIDO => '#10b981',   // emerald / success
+            self::REJEITADO => '#ef4444',   // red / danger
+            self::EXPORTADO => '#6c757d',   // gray / secondary
+            self::ESTORNADO => '#1e293b',   // dark slate
+            self::CANCELADO => '#dc2626',   // red-darker
+            self::ESTORNO_SOLICITADO => '#d97706',   // orange-amber
         };
     }
 
@@ -58,7 +58,7 @@ enum LancamentoStatus: string
 
     public function podeSerRejeitado(): bool
     {
-        return in_array($this, [self::PENDENTE, self::CONFERIDO_SETORIAL, self::ESTORNADO]);
+        return in_array($this, [self::PENDENTE, self::CONFERIDO_SETORIAL]);
     }
 
     public function podeSerExportado(): bool

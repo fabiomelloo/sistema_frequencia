@@ -2,13 +2,15 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
+use App\Enums\UserRole;
 use App\Models\Competencia;
+use App\Models\Configuracao;
 use App\Models\PrazoSetorial;
 use App\Models\User;
-use App\Enums\CompetenciaStatus;
 use App\Services\AuditService;
+use App\Services\CompetenciaService;
 use Carbon\Carbon;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class FecharCompetenciasCommand extends Command
@@ -46,17 +48,21 @@ class FecharCompetenciasCommand extends Command
     private function fecharPrazosSetoriais(): void
     {
         $hoje = Carbon::today();
-        
+
         $prazosExpirados = PrazoSetorial::whereNull('fechado_em')
             ->whereDate('data_limite', '<', $hoje)
             ->get();
 
         if ($prazosExpirados->isEmpty()) {
             $this->info('Nenhum prazo setorial expirado.');
+
             return;
         }
 
-        $usuarioSistema = User::firstWhere('email', 'admin@example.com') ?: User::first();
+        $emailSistema = Configuracao::get('email_usuario_sistema', 'admin@example.com');
+        $usuarioSistema = User::firstWhere('email', $emailSistema)
+            ?: User::where('role', UserRole::ADMIN)->first()
+            ?: User::first();
 
         DB::beginTransaction();
         try {
@@ -74,10 +80,10 @@ class FecharCompetenciasCommand extends Command
             }
             DB::commit();
             $this->info("{$prazosExpirados->count()} prazos setoriais fechados automaticamente.");
-            
+
         } catch (\Exception $e) {
             DB::rollBack();
-            $this->error('Erro ao fechar prazos setoriais: ' . $e->getMessage());
+            $this->error('Erro ao fechar prazos setoriais: '.$e->getMessage());
         }
     }
 
@@ -91,10 +97,11 @@ class FecharCompetenciasCommand extends Command
 
         if ($competenciasExpiradas->isEmpty()) {
             $this->info('Nenhuma competência geral expirada.');
+
             return;
         }
 
-        $service = app(\App\Services\CompetenciaService::class);
+        $service = app(CompetenciaService::class);
         $fechadasCount = 0;
 
         foreach ($competenciasExpiradas as $competencia) {
@@ -109,9 +116,9 @@ class FecharCompetenciasCommand extends Command
                 );
                 $fechadasCount++;
             } catch (\InvalidArgumentException $e) {
-                $this->warn("Aviso: Não foi possível fechar automaticamente a competência {$competencia->referencia} (ID {$competencia->id}): " . $e->getMessage());
+                $this->warn("Aviso: Não foi possível fechar automaticamente a competência {$competencia->referencia} (ID {$competencia->id}): ".$e->getMessage());
             } catch (\Exception $e) {
-                $this->error("Erro inesperado ao fechar competência {$competencia->referencia}: " . $e->getMessage());
+                $this->error("Erro inesperado ao fechar competência {$competencia->referencia}: ".$e->getMessage());
             }
         }
 

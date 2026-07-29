@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Carbon\Carbon;
 
 class LotacaoHistorico extends Model
 {
+    use HasFactory;
+
     protected $table = 'lotacao_historico';
 
     protected $fillable = [
@@ -34,18 +36,17 @@ class LotacaoHistorico extends Model
     }
 
     /**
-     * Retorna o setor em que o servidor estava numa competência (YYYY-MM).
+     * Retorna o setor em que o servidor estava no período da competência (YYYY-MM).
      */
     public static function setorNaCompetencia(int $servidorId, string $competencia): ?int
     {
-        $inicioMes = Carbon::createFromFormat('Y-m', $competencia)->startOfMonth();
-        $fimMes = Carbon::createFromFormat('Y-m', $competencia)->endOfMonth();
+        [$inicioPeriodo, $fimPeriodo] = Competencia::periodoDaReferencia($competencia);
 
         $lotacao = self::where('servidor_id', $servidorId)
-            ->where('data_inicio', '<=', $fimMes)
-            ->where(function ($q) use ($inicioMes) {
+            ->where('data_inicio', '<=', $fimPeriodo)
+            ->where(function ($q) use ($inicioPeriodo) {
                 $q->whereNull('data_fim')
-                  ->orWhere('data_fim', '>=', $inicioMes);
+                    ->orWhere('data_fim', '>=', $inicioPeriodo);
             })
             ->orderBy('data_inicio', 'desc')
             ->first();

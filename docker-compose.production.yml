@@ -1,0 +1,122 @@
+x-app-environment: &app-environment
+  APP_NAME: ${APP_NAME:-Sistema Frequencia}
+  APP_ENV: production
+  APP_KEY: "${APP_KEY:?APP_KEY obrigatoria}"
+  APP_DEBUG: "false"
+  APP_URL: "${APP_URL:?APP_URL HTTPS obrigatoria}"
+  APP_TIMEZONE: ${APP_TIMEZONE:-America/Sao_Paulo}
+  APP_LOCALE: pt_BR
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: ${LOG_LEVEL:-warning}
+  DB_CONNECTION: mysql
+  DB_HOST: db
+  DB_PORT: 3306
+  DB_DATABASE: "${DB_DATABASE:?DB_DATABASE obrigatorio}"
+  DB_USERNAME: "${DB_USERNAME:?DB_USERNAME obrigatorio}"
+  DB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD obrigatoria}"
+  CACHE_STORE: database
+  SESSION_DRIVER: database
+  SESSION_SECURE_COOKIES: "true"
+  QUEUE_CONNECTION: database
+  QUEUE_FAILED_DATABASE: mysql
+  FILESYSTEM_DISK: local
+  BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY obrigatoria}"
+
+x-app-service: &app-service
+  image: sistema_frequencia_app:${APP_IMAGE_TAG:-latest}
+  build:
+    context: .
+    target: app
+  restart: unless-stopped
+  environment: *app-environment
+  volumes:
+    - app-storage:/var/www/html/storage
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  app:
+    <<: *app-service
+    healthcheck:
+      test: ["CMD", "php", "artisan", "sistema:verificar-prontidao", "--producao"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 45s
+
+  web:
+    image: sistema_frequencia_web:${APP_IMAGE_TAG:-latest}
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_HTTP_PORT:-8080}:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    <<: *app-service
+    command: ["php", "artisan", "queue:work", "database", "--sleep=3", "--tries=3", "--timeout=120", "--max-time=3600"]
+    stop_grace_period: 130s
+    depends_on:
+      app:
+        condition: service_healthy
+
+  scheduler:
+    <<: *app-service
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_DATABASE: "${DB_DATABASE:?DB_DATABASE obrigatorio}"
+      MYSQL_USER: "${DB_USERNAME:?DB_USERNAME obrigatorio}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD obrigatoria}"
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD obrigatoria}"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backup:
+    build:
+      context: docker/backup
+    image: sistema_frequencia_backup:${APP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: "${DB_DATABASE:?DB_DATABASE obrigatorio}"
+      DB_USERNAME: "${DB_USERNAME:?DB_USERNAME obrigatorio}"
+      DB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD obrigatoria}"
+      BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY obrigatoria}"
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - app-storage:/source/storage:ro
+      - backup-data:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  app-storage:
+  backup-data:
+  db-data:

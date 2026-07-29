@@ -2,13 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Setor;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreSetorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->isCentral();
+        return $this->user()?->can('create', Setor::class) ?? false;
     }
 
     protected function prepareForValidation(): void
@@ -24,6 +25,8 @@ class StoreSetorRequest extends FormRequest
         return [
             'nome' => ['required', 'string', 'max:255'],
             'sigla' => ['required', 'string', 'max:10', 'unique:setores,sigla'],
+            'codigo_externo' => ['nullable', 'string', 'max:50'],
+            'setor_pai_id' => ['nullable', 'integer', 'exists:setores,id'],
             'ativo' => ['required', 'boolean'],
         ];
     }

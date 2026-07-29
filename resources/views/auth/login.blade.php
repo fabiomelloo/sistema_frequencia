@@ -84,18 +84,6 @@
                             @enderror
                         </div>
 
-                        <div class="mb-3 form-check">
-                            <input 
-                                type="checkbox" 
-                                class="form-check-input" 
-                                id="remember" 
-                                name="remember"
-                            >
-                            <label class="form-check-label" for="remember">
-                                Lembrar-me
-                            </label>
-                        </div>
-
                         <button type="submit" class="btn btn-primary w-100 mb-3">
                             <i class="bi bi-box-arrow-in-right"></i> Entrar
                         </button>

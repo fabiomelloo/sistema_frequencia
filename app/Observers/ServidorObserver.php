@@ -2,79 +2,82 @@
 
 namespace App\Observers;
 
+use App\Enums\LancamentoStatus;
+use App\Models\LancamentoSetorial;
 use App\Models\Servidor;
-use App\Services\ServidorCicloVidaService;
 
 class ServidorObserver
 {
     /**
      * Handle the Servidor "updated" event.
+     *
+     * Detecta mudanças de setor e de status (inativação) e cancela
+     * automaticamente lançamentos pendentes afetados.
+     *
+     * Nota: o ServidorCicloVidaService salva o servidor sem disparar eventos
+     * para evitar duplicação desta regra com o fluxo transacional completo.
      */
     public function updated(Servidor $servidor): void
     {
-        // Verifica se o setor mudou
+        if (app()->runningInConsole()) {
+            return;
+        }
+
+        // Mudança de setor (transferência manual via CRUD)
         if ($servidor->wasChanged('setor_id')) {
             $setorAntigoId = $servidor->getOriginal('setor_id');
-            $novoSetorId = $servidor->setor_id;
-            
-            // Reverte a alteração temporariamente para o service lidar com isso e salvar o histórico
-            // O service já chama $servidor->save(), então vamos evitar um loop. 
-            // Para não ter problema, podemos apenas informar o antigo e o novo pro service em um método específico 
-            // ou rodar a lógica aqui com cuidado.
-            // Para reaproveitar o ServidorCicloVidaService que faz a transação e tudo,
-            // podemos alterar o service ou apenas fazer o tratamento direto aqui (não muito ideal pois duplicaria código).
-            // A melhor abordagem com o model já salvo é que o Service `transferirServidor` parece
-            // feito pra ser chamado de um Controller (onde o Model não foi salvo ainda).
-            
-            // Vamos delegar para o service se não for uma atualização gerada de forma automática sem request de transferência explícito
-            // Vamos checar se essa atualização já não foi feita dentro do próprio service.
-            // Se foi feita pelo service, não precisamos rodar nada aqui, pois o service já roda as notificações e lógicas.
-            // Para evitar a duplicação se a modificação veio do admin:
-            if (!app()->runningInConsole() && !app()->bound('servidor.transferindo')) {
-                // Aqui seria a implementação do Observer para detectar mudanças manuais via CRUD ou Nova.
-                // Como não sabemos a raiz de todas as mudanças, podemos apenas cancelar as pendências antigas:
-                $servidorId = $servidor->id;
-                $lancamentosCancelar = \App\Models\LancamentoSetorial::where('servidor_id', $servidorId)
-                    ->where('setor_origem_id', $setorAntigoId)
-                    ->whereIn('status', [
-                        \App\Enums\LancamentoStatus::PENDENTE,
-                        \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL,
-                        \App\Enums\LancamentoStatus::REJEITADO,
-                    ])->get();
-
-                foreach ($lancamentosCancelar as $lancamento) {
-                    $lancamento->status = \App\Enums\LancamentoStatus::REJEITADO;
-                    $lancamento->motivo_rejeicao = "Cancelado automaticamente: O servidor foi transferido de setor.";
-                    $lancamento->id_validador = auth()->id() ?? 1; // Fallback se via comando
-                    $lancamento->validated_at = now();
-                    $lancamento->save();
-                }
-            }
+            $this->cancelarLancamentosPendentes(
+                $servidor->id,
+                'Cancelado automaticamente: O servidor foi transferido de setor.',
+                $setorAntigoId
+            );
         }
 
-        // Verifica se o servidor foi desligado/inativado
-        if ($servidor->wasChanged('ativo') && !$servidor->ativo) {
+        // Servidor desligado/inativado
+        if ($servidor->wasChanged('ativo') && ! $servidor->ativo) {
             $dataDesligamento = $servidor->data_desligamento ?? now();
-            
-            // Só cancela lançamentos futuros ao desligamento.
             $competenciaDesligamento = $dataDesligamento->format('Y-m');
-
-            $lancamentosCancelar = \App\Models\LancamentoSetorial::where('servidor_id', $servidor->id)
-                ->whereIn('status', [
-                    \App\Enums\LancamentoStatus::PENDENTE,
-                    \App\Enums\LancamentoStatus::CONFERIDO_SETORIAL,
-                    \App\Enums\LancamentoStatus::REJEITADO,
-                ])
-                ->where('competencia', '>=', $competenciaDesligamento)
-                ->get();
-
-            foreach ($lancamentosCancelar as $lancamento) {
-                $lancamento->status = \App\Enums\LancamentoStatus::REJEITADO;
-                $lancamento->motivo_rejeicao = "Cancelado automaticamente: O servidor foi desligado/exonerado na competência " . $competenciaDesligamento . ".";
-                $lancamento->id_validador = auth()->id() ?? 1;
-                $lancamento->validated_at = now();
-                $lancamento->save();
-            }
+            $this->cancelarLancamentosPendentes(
+                $servidor->id,
+                "Cancelado automaticamente: O servidor foi desligado/exonerado na competência {$competenciaDesligamento}.",
+                null,
+                $competenciaDesligamento
+            );
         }
+    }
+
+    /**
+     * Cancela lançamentos pendentes de um servidor.
+     *
+     * @param  int|null  $setorOrigemId  Se informado, filtra apenas pelo setor antigo (transferência)
+     * @param  string|null  $competenciaMinima  Se informado, filtra competência >= (desligamento)
+     */
+    private function cancelarLancamentosPendentes(
+        int $servidorId,
+        string $motivo,
+        ?int $setorOrigemId = null,
+        ?string $competenciaMinima = null
+    ): void {
+        $query = LancamentoSetorial::where('servidor_id', $servidorId)
+            ->whereIn('status', [
+                LancamentoStatus::PENDENTE,
+                LancamentoStatus::CONFERIDO_SETORIAL,
+                LancamentoStatus::REJEITADO,
+            ]);
+
+        if ($setorOrigemId) {
+            $query->where('setor_origem_id', $setorOrigemId);
+        }
+
+        if ($competenciaMinima) {
+            $query->where('competencia', '>=', $competenciaMinima);
+        }
+
+        $query->update([
+            'status' => LancamentoStatus::CANCELADO->value,
+            'motivo_rejeicao' => $motivo,
+            'id_validador' => auth()->id(), // null em contexto de console — ação automática do sistema
+            'validated_at' => now(),
+        ]);
     }
 }

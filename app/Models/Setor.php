@@ -2,14 +2,49 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Setor extends Model
 {
+    use HasFactory;
+
     protected $table = 'setores';
-    protected $fillable = ['nome', 'sigla', 'ativo'];
+
+    protected $fillable = ['nome', 'sigla', 'codigo_externo', 'setor_pai_id', 'ativo'];
+
+    public function setorPai(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'setor_pai_id');
+    }
+
+    public function setoresFilhos(): HasMany
+    {
+        return $this->hasMany(self::class, 'setor_pai_id');
+    }
+
+    public function possuiAncestral(int $setorId): bool
+    {
+        $atual = $this->setorPai;
+        $visitados = [];
+
+        while ($atual) {
+            if ($atual->id === $setorId) {
+                return true;
+            }
+
+            if (isset($visitados[$atual->id])) {
+                return false;
+            }
+
+            $visitados[$atual->id] = true;
+            $atual = $atual->setorPai;
+        }
+
+        return false;
+    }
 
     public function usuarios(): HasMany
     {
@@ -31,5 +66,10 @@ class Setor extends Model
     public function lancamentos(): HasMany
     {
         return $this->hasMany(LancamentoSetorial::class, 'setor_origem_id');
+    }
+
+    public function folhasFrequencia(): HasMany
+    {
+        return $this->hasMany(FolhaFrequencia::class);
     }
 }

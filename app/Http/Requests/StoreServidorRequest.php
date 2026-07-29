@@ -2,13 +2,16 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\VinculoServidor;
+use App\Models\Servidor;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreServidorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isCentral();
+        return $this->user()?->can('create', Servidor::class) ?? false;
     }
 
     protected function prepareForValidation(): void
@@ -23,8 +26,7 @@ class StoreServidorRequest extends FormRequest
         }
 
         $this->merge([
-            'ativo' => $this->has('ativo'),
-            'origem_registro' => $this->input('origem_registro') ?? 'MANUAL',
+            'origem_registro' => 'MANUAL',
         ]);
     }
 
@@ -39,17 +41,18 @@ class StoreServidorRequest extends FormRequest
                 'regex:/^\d{11}$/',
                 'unique:servidores,cpf',
                 function ($attribute, $value, $fail) {
-                    if ($value && !$this->validarCpf($value)) {
+                    if ($value && ! $this->validarCpf($value)) {
                         $fail('O CPF informado é inválido.');
                     }
                 },
             ],
             'nome' => ['required', 'string', 'max:255'],
             'setor_id' => ['required', 'exists:setores,id'],
-            'origem_registro' => ['nullable', 'string', 'max:255'],
-            'ativo' => ['required', 'boolean'],
-            'funcao_vigia' => ['nullable', 'boolean'],
-            'trabalha_noturno' => ['nullable', 'boolean'],
+            'data_admissao' => ['required', 'date', 'before_or_equal:today'],
+            'tipo_vinculo' => ['required', Rule::enum(VinculoServidor::class)],
+            'cargo' => ['required', 'string', 'max:150'],
+            'carga_horaria' => ['required', 'integer', 'min:1', 'max:80'],
+            'ato_referencia' => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -102,7 +105,10 @@ class StoreServidorRequest extends FormRequest
             'nome.max' => 'O nome não pode ter mais de 255 caracteres.',
             'setor_id.required' => 'O setor é obrigatório.',
             'setor_id.exists' => 'Setor inválido.',
-            'origem_registro.max' => 'A origem do registro não pode ter mais de 255 caracteres.',
+            'data_admissao.required' => 'A data de admissão é obrigatória.',
+            'tipo_vinculo.required' => 'O vínculo funcional é obrigatório.',
+            'cargo.required' => 'O cargo é obrigatório.',
+            'carga_horaria.required' => 'A carga horária semanal é obrigatória.',
         ];
     }
 }

@@ -8,7 +8,7 @@ class SolicitarEstornoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && auth()->user()->isSetorial();
+        return $this->user()?->role?->podeFazerLancamentos() ?? false;
     }
 
     public function rules(): array

@@ -9,9 +9,11 @@
             <h1><i class="bi bi-building"></i> {{ $setor->nome }}</h1>
         </div>
         <div class="col-md-4 text-end">
+            @can('update', $setor)
             <a href="{{ route('admin.setores.edit', $setor) }}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Editar
             </a>
+            @endcan
             <a href="{{ route('admin.setores.index') }}" class="btn btn-secondary">
                 <i class="bi bi-arrow-left"></i> Voltar
             </a>
@@ -27,6 +29,8 @@
                 <div class="card-body">
                     <p><strong>Nome:</strong> {{ $setor->nome }}</p>
                     <p><strong>Sigla:</strong> <span class="badge bg-secondary">{{ $setor->sigla }}</span></p>
+                    <p><strong>Código externo:</strong> {{ $setor->codigo_externo ?: 'Não informado' }}</p>
+                    <p><strong>Unidade superior:</strong> {{ $setor->setorPai?->nome ?? 'Nenhuma' }}</p>
                     <p><strong>Status:</strong> 
                         @if ($setor->ativo)
                             <span class="badge bg-success">Ativo</span>
@@ -46,6 +50,7 @@
                     <p><strong>Usuários:</strong> {{ $setor->usuarios->count() }}</p>
                     <p><strong>Servidores:</strong> {{ $setor->servidores->count() }}</p>
                     <p><strong>Eventos Permitidos:</strong> {{ $eventosPermitidos->count() }}</p>
+                    <p><strong>Setores subordinados:</strong> {{ $setor->setoresFilhos->count() }}</p>
                 </div>
             </div>
         </div>

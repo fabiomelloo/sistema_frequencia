@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -10,15 +8,15 @@ services:
     volumes:
       - ./:/var/www/html
     environment:
-      - APP_ENV=local
-      - APP_DEBUG=true
-      - APP_URL=http://localhost:8000
-      - DB_CONNECTION=pgsql
+      - APP_ENV=${APP_ENV:-local}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      - APP_URL=${APP_URL:-http://localhost:8000}
+      - DB_CONNECTION=mysql
       - DB_HOST=db
-      - DB_PORT=5432
+      - DB_PORT=3306
       - DB_DATABASE=frequencia
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=1234
+      - DB_USERNAME=frequencia
+      - DB_PASSWORD=${DB_PASSWORD:-frequencia}
     depends_on:
       - db
 
@@ -35,17 +33,18 @@ services:
       - app
 
   db:
-    image: postgres:15
+    image: mysql:8.4
     container_name: sistema_frequencia_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: frequencia
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1234
+      MYSQL_DATABASE: frequencia
+      MYSQL_USER: frequencia
+      MYSQL_PASSWORD: ${DB_PASSWORD:-frequencia}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data:/var/lib/mysql
     ports:
-      - "5432:5432"
+      - "3306:3306"
 
 volumes:
   db-data:

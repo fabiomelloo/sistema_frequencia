@@ -2,17 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Enums\CompetenciaStatus;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Competencia extends Model
 {
+    use HasFactory;
+
     protected $table = 'competencias';
 
     protected $fillable = [
         'referencia',
+        'data_inicio',
+        'data_fim',
         'status',
         'data_limite',
         'aberta_por',
@@ -21,10 +27,25 @@ class Competencia extends Model
     ];
 
     protected $casts = [
+        'data_inicio' => 'date',
+        'data_fim' => 'date',
         'data_limite' => 'date',
         'fechada_em' => 'datetime',
         'status' => CompetenciaStatus::class,
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Competencia $competencia): void {
+            if ($competencia->data_inicio && $competencia->data_fim) {
+                return;
+            }
+
+            [$inicio, $fim] = self::periodoPadrao($competencia->referencia);
+            $competencia->data_inicio ??= $inicio;
+            $competencia->data_fim ??= $fim;
+        });
+    }
 
     // Relationships
     public function quemAbriu(): BelongsTo
@@ -45,6 +66,21 @@ class Competencia extends Model
         return $this->belongsTo(User::class, 'fechada_por');
     }
 
+    public function ocorrenciasFrequencia(): HasMany
+    {
+        return $this->hasMany(OcorrenciaFrequencia::class);
+    }
+
+    public function folhasFrequencia(): HasMany
+    {
+        return $this->hasMany(FolhaFrequencia::class);
+    }
+
+    public function projecoesExportacaoFolha(): HasMany
+    {
+        return $this->hasMany(ProjecaoExportacaoFolha::class);
+    }
+
     // Status helpers
     public function estaAberta(): bool
     {
@@ -58,17 +94,19 @@ class Competencia extends Model
 
     public function prazoExpirado(): bool
     {
-        if (!$this->data_limite) {
+        if (! $this->data_limite) {
             return false;
         }
+
         return now()->gt($this->data_limite);
     }
 
     public function prazoRestante(): ?int
     {
-        if (!$this->data_limite) {
+        if (! $this->data_limite) {
             return null;
         }
+
         return max(0, (int) now()->diffInDays($this->data_limite, false));
     }
 
@@ -102,45 +140,151 @@ class Competencia extends Model
     }
 
     /**
-     * Retorna os dias do mês da competência.
+     * Alias compatível para a quantidade de dias do período da competência.
      */
     public function diasNoMes(): int
     {
+        return $this->diasNoPeriodo();
+    }
+
+    public function getDescricaoAttribute(): string
+    {
         try {
-            return Carbon::createFromFormat('Y-m', $this->referencia)->daysInMonth;
+            $referencia = Carbon::createFromFormat('Y-m-d', "{$this->referencia}-01")->format('m/Y');
+
+            return "{$referencia} ({$this->inicioPeriodo()->format('d/m/Y')} a {$this->fimPeriodo()->format('d/m/Y')})";
         } catch (\Exception $e) {
-            return 0;
+            return $this->referencia;
         }
     }
 
     /**
-     * Retorna os dias úteis do mês (segunda a sexta, excluindo feriados).
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public static function periodoPadrao(string $referencia): array
+    {
+        $base = Carbon::createFromFormat('Y-m-d', "{$referencia}-01")->startOfDay();
+
+        return [
+            $base->copy()->subMonthNoOverflow()->day(11),
+            $base->copy()->day(10),
+        ];
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    public static function periodoDaReferencia(string $referencia): array
+    {
+        $competencia = self::buscarPorReferencia($referencia);
+
+        if ($competencia?->data_inicio && $competencia?->data_fim) {
+            return [$competencia->data_inicio->copy(), $competencia->data_fim->copy()];
+        }
+
+        return self::periodoPadrao($referencia);
+    }
+
+    public function inicioPeriodo(): Carbon
+    {
+        return $this->data_inicio?->copy() ?? self::periodoPadrao($this->referencia)[0];
+    }
+
+    public function fimPeriodo(): Carbon
+    {
+        return $this->data_fim?->copy() ?? self::periodoPadrao($this->referencia)[1];
+    }
+
+    public function diasNoPeriodo(): int
+    {
+        return $this->inicioPeriodo()->diffInDays($this->fimPeriodo()) + 1;
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    public function periodoAtivoDoServidor(Servidor $servidor): ?array
+    {
+        $inicio = $this->inicioPeriodo();
+        $fim = $this->fimPeriodo();
+
+        if ($servidor->data_admissao && $servidor->data_admissao->gt($inicio)) {
+            $inicio = $servidor->data_admissao->copy();
+        }
+
+        if ($servidor->data_desligamento && $servidor->data_desligamento->lt($fim)) {
+            $fim = $servidor->data_desligamento->copy();
+        }
+
+        return $inicio->lte($fim) ? [$inicio, $fim] : null;
+    }
+
+    public function diasUteisAtivosDoServidor(Servidor $servidor): int
+    {
+        $periodoAtivo = $this->periodoAtivoDoServidor($servidor);
+
+        if (! $periodoAtivo) {
+            return 0;
+        }
+
+        return $this->diasUteisNoIntervalo(...$periodoAtivo);
+    }
+
+    public function diasUteisNoPeriodo(): int
+    {
+        return $this->diasUteisNoIntervalo($this->inicioPeriodo(), $this->fimPeriodo());
+    }
+
+    public function diasUteisNoIntervalo(Carbon $inicio, Carbon $fim): int
+    {
+        return self::contarDiasUteis($inicio, $fim, $this->feriadosEntre($inicio, $fim));
+    }
+
+    public static function contarDiasUteis(Carbon $inicio, Carbon $fim, array $feriados = []): int
+    {
+        if ($inicio->gt($fim)) {
+            return 0;
+        }
+
+        $feriados = array_flip($feriados);
+        $diasUteis = 0;
+
+        for ($data = $inicio->copy(); $data->lte($fim); $data->addDay()) {
+            if (! $data->isWeekend() && ! isset($feriados[$data->format('Y-m-d')])) {
+                $diasUteis++;
+            }
+        }
+
+        return $diasUteis;
+    }
+
+    /**
+     * Retorna os dias úteis do período (segunda a sexta, excluindo feriados).
      * Feriados são lidos da configuração 'feriados_YYYY' (formato: Y-m-d separados por vírgula).
      */
     public static function obterDiasUteis(string $referencia): int
     {
         try {
-            $inicio = Carbon::createFromFormat('Y-m', $referencia)->startOfMonth();
-            $fim = Carbon::createFromFormat('Y-m', $referencia)->endOfMonth();
+            $competencia = self::buscarPorReferencia($referencia)
+                ?? new self(['referencia' => $referencia]);
         } catch (\Exception $e) {
             return 0;
         }
 
-        // Carregar feriados do ano a partir da configuração
-        $ano = $inicio->year;
-        $feriadosStr = Configuracao::get("feriados_{$ano}", '');
-        $feriados = array_filter(array_map('trim', explode(',', $feriadosStr)));
+        return $competencia->diasUteisNoPeriodo();
+    }
 
-        $diasUteis = 0;
-        $current = $inicio->copy();
-
-        while ($current->lte($fim)) {
-            if (!$current->isWeekend() && !in_array($current->format('Y-m-d'), $feriados)) {
-                $diasUteis++;
-            }
-            $current->addDay();
+    /**
+     * @return array<int, string>
+     */
+    private function feriadosEntre(Carbon $inicio, Carbon $fim): array
+    {
+        $feriados = [];
+        foreach (range($inicio->year, $fim->year) as $ano) {
+            $feriadosStr = Configuracao::get("feriados_{$ano}", '');
+            $feriados = array_merge($feriados, array_filter(array_map('trim', explode(',', $feriadosStr))));
         }
 
-        return $diasUteis;
+        return array_values(array_unique($feriados));
     }
 }

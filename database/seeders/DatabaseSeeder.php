@@ -2,10 +2,9 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Setor;
-use App\Models\EventoFolha;
 use App\Models\User;
+use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -24,7 +23,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Admin',
                 'password' => 'password',
-                'role' => 'CENTRAL',
+                'role' => 'ADMIN',
                 'setor_id' => $setor->id,
             ]
         );

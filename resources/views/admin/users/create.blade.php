@@ -69,12 +69,11 @@
                     <select class="form-select @error('role') is-invalid @enderror" 
                             id="role" name="role" required>
                         <option value="">Selecione uma função...</option>
-                        <option value="SETORIAL" {{ old('role') === 'SETORIAL' ? 'selected' : '' }}>
-                            Setorial (Registra lançamentos)
-                        </option>
-                        <option value="CENTRAL" {{ old('role') === 'CENTRAL' ? 'selected' : '' }}>
-                            Central (Valida lançamentos)
-                        </option>
+                        @foreach (\App\Enums\UserRole::cases() as $role)
+                            <option value="{{ $role->value }}" @selected(old('role') === $role->value)>
+                                {{ $role->label() }}
+                            </option>
+                        @endforeach
                     </select>
                     @error('role')
                         <div class="invalid-feedback">{{ $message }}</div>

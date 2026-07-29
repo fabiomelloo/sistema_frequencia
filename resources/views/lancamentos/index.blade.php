@@ -6,13 +6,10 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h4 class="fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>Meus Lançamentos</h4>
+        <h1 class="h4 fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>Meus Lançamentos</h1>
         <p class="text-muted mb-0 small">Gerencie e aprove os lançamentos da sua equipe.</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="{{ route('lancamentos.importar.form') }}" class="btn btn-outline-info rounded-pill px-3 shadow-sm">
-            <i class="bi bi-upload me-1"></i> Importar CSV
-        </a>
         <a href="{{ route('lancamentos.lixeira') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
             <i class="bi bi-trash me-1"></i> Lixeira
         </a>
@@ -64,6 +61,8 @@
                     <option value="CONFERIDO" @selected(($filtros['status'] ?? '') == 'CONFERIDO')>Conf. Central</option>
                     <option value="REJEITADO" @selected(($filtros['status'] ?? '') == 'REJEITADO')>Rejeitado</option>
                     <option value="EXPORTADO" @selected(($filtros['status'] ?? '') == 'EXPORTADO')>Exportado</option>
+                    <option value="ESTORNO_SOLICITADO" @selected(($filtros['status'] ?? '') == 'ESTORNO_SOLICITADO')>Estorno solicitado</option>
+                    <option value="ESTORNADO" @selected(($filtros['status'] ?? '') == 'ESTORNADO')>Estornado</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -157,8 +156,10 @@
                             <td class="text-end pe-4">
                                 <div class="btn-group shadow-sm rounded-pill">
                                     @if ($lancamento->status->value === 'PENDENTE')
-                                        <button type="button" class="btn btn-sm btn-outline-success" 
-                                                onclick="aprovarUm({{ $lancamento->id }}, this)" 
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-success btn-aprovar"
+                                                data-url="{{ route('lancamentos.aprovar-setorial', $lancamento) }}"
+                                                data-confirm="Aprovar este lançamento?"
                                                 title="Aprovar">
                                             <i class="bi bi-check-lg icon-action"></i>
                                             <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
@@ -170,11 +171,22 @@
                                             <i class="bi bi-pencil"></i>
                                         </a>
 
-                                        <button type="button" class="btn btn-sm btn-outline-danger" 
-                                                onclick="deletarUm({{ $lancamento->id }}, this)"
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger btn-deletar"
+                                                data-url="{{ route('lancamentos.destroy', $lancamento) }}"
+                                                data-confirm="Tem certeza que deseja excluir este lançamento?"
                                                 title="Excluir">
                                             <i class="bi bi-trash icon-action"></i>
                                             <span class="spinner-border spinner-border-sm d-none spinner-action" role="status" aria-hidden="true"></span>
+                                        </button>
+                                    @endif
+
+                                    @if ($lancamento->isExportado())
+                                        <button type="button" class="btn btn-sm btn-outline-dark"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#solicitarEstornoModal{{ $lancamento->id }}"
+                                                title="Solicitar estorno">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
                                         </button>
                                     @endif
                                 </div>
@@ -199,6 +211,40 @@
     </div>
 </form>
 
+@foreach ($lancamentos as $lancamento)
+    @if ($lancamento->isExportado())
+        <div class="modal fade" id="solicitarEstornoModal{{ $lancamento->id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-1"></i>Solicitar Estorno</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ route('lancamentos.solicitar-estorno', $lancamento) }}" method="POST">
+                        @csrf
+                        <div class="modal-body">
+                            <p class="text-muted">
+                                <strong>{{ $lancamento->servidor->nome }}</strong> — {{ $lancamento->evento->descricao }}
+                            </p>
+                            <p class="small text-muted">
+                                A Central analisará esta solicitação. A competência só poderá ser reaberta depois da conclusão dos estornos pendentes.
+                            </p>
+                            <div class="mb-3">
+                                <label for="motivo_estorno{{ $lancamento->id }}" class="form-label fw-semibold">Motivo <span class="text-danger">*</span></label>
+                                <textarea name="motivo_estorno" id="motivo_estorno{{ $lancamento->id }}" class="form-control" rows="4" minlength="5" maxlength="1000" required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-dark">Enviar Solicitação</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endif
+@endforeach
+
 {{-- Form Delete Hidden --}}
 <form id="deleteForm" action="" method="POST" style="display: none;">
     @csrf
@@ -215,8 +261,9 @@
 @section('scripts')
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const checkAll = document.getElementById('checkAll');
-        const itemChecks = document.querySelectorAll('.item-check');
+        // ── Checkboxes em lote ──────────────────────────────────────────
+        const checkAll    = document.getElementById('checkAll');
+        const itemChecks  = document.querySelectorAll('.item-check');
         const bulkActions = document.getElementById('bulkActions');
         const selectedCount = document.getElementById('selectedCount');
 
@@ -231,35 +278,40 @@
             updateBulkActions();
         });
 
-        itemChecks.forEach(check => {
-            check.addEventListener('change', updateBulkActions);
+        itemChecks.forEach(check => check.addEventListener('change', updateBulkActions));
+
+        // ── Botões de ação via data-* (sem interpolação inline) ─────────
+        function showSpinner(btn) {
+            const icon    = btn.querySelector('.icon-action');
+            const spinner = btn.querySelector('.spinner-action');
+            if (icon)    icon.classList.add('d-none');
+            if (spinner) spinner.classList.remove('d-none');
+            btn.disabled = true;
+        }
+
+        // Deletar
+        document.querySelectorAll('.btn-deletar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (confirm(this.dataset.confirm)) {
+                    showSpinner(this);
+                    const form = document.getElementById('deleteForm');
+                    form.action = this.dataset.url;
+                    form.submit();
+                }
+            });
+        });
+
+        // Aprovar individual
+        document.querySelectorAll('.btn-aprovar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                if (confirm(this.dataset.confirm)) {
+                    showSpinner(this);
+                    const form = document.getElementById('approveForm');
+                    form.action = this.dataset.url;
+                    form.submit();
+                }
+            });
         });
     });
-
-    function deletarUm(id, btn) {
-        if(confirm('Tem certeza que deseja excluir este lançamento?')) {
-            showSpinner(btn);
-            const form = document.getElementById('deleteForm');
-            form.action = `/lancamentos/${id}`;
-            form.submit();
-        }
-    }
-
-    function aprovarUm(id, btn) {
-        if(confirm('Aprovar este lançamento?')) {
-            showSpinner(btn);
-            const form = document.getElementById('approveForm');
-            form.action = `/lancamentos/${id}/aprovar-setorial`;
-            form.submit();
-        }
-    }
-
-    function showSpinner(btn) {
-        const icon = btn.querySelector('.icon-action');
-        const spinner = btn.querySelector('.spinner-action');
-        if (icon) icon.classList.add('d-none');
-        if (spinner) spinner.classList.remove('d-none');
-        btn.disabled = true;
-    }
 </script>
 @endsection
