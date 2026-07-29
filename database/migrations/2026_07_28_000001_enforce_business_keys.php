@@ -31,11 +31,8 @@ return new class extends Migration
         });
 
         Schema::table('folha_frequencia_itens', function (Blueprint $table): void {
-            $table->unsignedBigInteger('monthly_event_key')
-                ->nullable()
-                ->storedAs("CASE WHEN origem_informacao = 'SETOR_MENSAL' THEN evento_id ELSE NULL END");
             $table->unique(
-                ['folha_frequencia_servidor_id', 'monthly_event_key'],
+                ['folha_frequencia_servidor_id', 'evento_id', 'origem_informacao'],
                 'folha_itens_monthly_event_unique'
             );
             $table->unique(
@@ -50,7 +47,6 @@ return new class extends Migration
         Schema::table('folha_frequencia_itens', function (Blueprint $table): void {
             $table->dropUnique('folha_itens_monthly_event_unique');
             $table->dropUnique('folha_itens_vantagem_unique');
-            $table->dropColumn('monthly_event_key');
         });
 
         Schema::table('lancamentos_setoriais', function (Blueprint $table): void {
