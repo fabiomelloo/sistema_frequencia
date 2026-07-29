@@ -76,7 +76,7 @@
                             ])>{{ $log->acao }}</span>
                         </td>
                         <td>{{ $log->modelo }} #{{ $log->modelo_id }}</td>
-                        <td>{{ Str::limit($log->descricao, 80) }}</td>
+                        <td>{{ Str::limit($log->descricaoParaExibicao(), 80) }}</td>
                         <td><code>{{ $log->ip }}</code></td>
                     </tr>
                 @empty

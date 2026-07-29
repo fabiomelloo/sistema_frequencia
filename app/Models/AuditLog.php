@@ -39,6 +39,15 @@ class AuditLog extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    public function descricaoParaExibicao(): ?string
+    {
+        if ($this->modelo === 'Configuracao') {
+            return 'Configuração de sistema alterada.';
+        }
+
+        return $this->descricao;
+    }
+
     protected static function booted(): void
     {
         static::updating(function (): never {
